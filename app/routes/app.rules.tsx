@@ -23,6 +23,9 @@ import {
   Checkbox,
   Banner,
   Box,
+  Divider,
+  ButtonGroup,
+  ProgressBar,
 } from "@shopify/polaris";
 import type { BadgeProps } from "@shopify/polaris";
 import {
@@ -31,11 +34,14 @@ import {
   DeleteIcon,
   ArrowUpIcon,
   ArrowDownIcon,
+  WandIcon,
 } from "@shopify/polaris-icons";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import prisma from "../db.server";
+import type { Strategy, SuggestedRule, SuggestionResult } from "../lib/rule-suggestions.server";
+import { generateRuleSuggestions, applySuggestions } from "../lib/rule-suggestions.server";
 
 // -- Types --
 
@@ -64,6 +70,8 @@ interface ActionData {
   intent: string;
   error?: string;
   ruleName?: string;
+  suggestions?: SuggestionResult;
+  appliedCount?: number;
 }
 
 // -- Constants --
@@ -195,6 +203,29 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       data: { active: !existing.active },
     });
     return { success: true, intent, ruleName: existing.name } satisfies ActionData;
+  }
+
+  if (intent === "suggest") {
+    const strategy = (formData.get("strategy") as Strategy) || "balanced";
+    try {
+      const suggestions = await generateRuleSuggestions(shop, strategy);
+      return { success: true, intent, suggestions } satisfies ActionData;
+    } catch (err) {
+      console.error("Failed to generate suggestions:", err);
+      return { success: false, intent, error: "Failed to generate suggestions" } satisfies ActionData;
+    }
+  }
+
+  if (intent === "apply_suggestions") {
+    const suggestionsJson = formData.get("suggestions") as string;
+    try {
+      const suggestions: SuggestedRule[] = JSON.parse(suggestionsJson);
+      const count = await applySuggestions(shop, suggestions);
+      return { success: true, intent, appliedCount: count } satisfies ActionData;
+    } catch (err) {
+      console.error("Failed to apply suggestions:", err);
+      return { success: false, intent, error: "Failed to apply suggestions" } satisfies ActionData;
+    }
   }
 
   return { success: false, intent, error: "Unknown action" } satisfies ActionData;
@@ -399,6 +430,229 @@ function RuleFormModal({
   );
 }
 
+// -- AI Suggestions --
+
+const STRATEGY_OPTIONS: Array<{ value: Strategy; label: string; description: string }> = [
+  { value: "retention", label: "Maximize retention", description: "Higher bonuses to keep customers coming back" },
+  { value: "balanced", label: "Balanced", description: "Moderate bonuses balancing cost and retention" },
+  { value: "cost_saving", label: "Cost-saving", description: "Lower bonuses focused on reducing refund costs" },
+];
+
+function AISuggestionsCard() {
+  const fetcher = useFetcher<ActionData>();
+  const shopify = useAppBridge();
+  const [strategy, setStrategy] = useState<Strategy>("balanced");
+  const [showSuggestions, setShowSuggestions] = useState(false);
+
+  const isLoading = fetcher.state !== "idle" && fetcher.formData?.get("intent") === "suggest";
+  const isApplying = fetcher.state !== "idle" && fetcher.formData?.get("intent") === "apply_suggestions";
+  const suggestions = fetcher.data?.suggestions;
+
+  useEffect(() => {
+    if (fetcher.data?.intent === "suggest" && fetcher.data?.success && fetcher.data?.suggestions) {
+      setShowSuggestions(true);
+    }
+    if (fetcher.data?.intent === "apply_suggestions" && fetcher.data?.success) {
+      shopify.toast.show(`${fetcher.data.appliedCount} rules created from suggestions`);
+      setShowSuggestions(false);
+    }
+    if (fetcher.data && !fetcher.data.success && fetcher.data.error) {
+      shopify.toast.show(fetcher.data.error, { isError: true });
+    }
+  }, [fetcher.data, shopify]);
+
+  const handleGenerate = useCallback(() => {
+    const form = new FormData();
+    form.set("intent", "suggest");
+    form.set("strategy", strategy);
+    fetcher.submit(form, { method: "post" });
+  }, [strategy, fetcher]);
+
+  const handleApply = useCallback(() => {
+    if (!suggestions?.suggestions) return;
+    const form = new FormData();
+    form.set("intent", "apply_suggestions");
+    form.set("suggestions", JSON.stringify(suggestions.suggestions));
+    fetcher.submit(form, { method: "post" });
+  }, [suggestions, fetcher]);
+
+  return (
+    <Card>
+      <BlockStack gap="400">
+        <InlineStack align="space-between" blockAlign="center">
+          <BlockStack gap="100">
+            <Text variant="headingSm" as="h2">
+              AI rule suggestions
+            </Text>
+            <Text variant="bodySm" as="p" tone="subdued">
+              Analyze your return data and get recommended rules
+            </Text>
+          </BlockStack>
+        </InlineStack>
+
+        <BlockStack gap="300">
+          <Text variant="bodySm" as="p" fontWeight="semibold">
+            Choose a strategy
+          </Text>
+          <ButtonGroup variant="segmented">
+            {STRATEGY_OPTIONS.map((opt) => (
+              <Button
+                key={opt.value}
+                pressed={strategy === opt.value}
+                onClick={() => setStrategy(opt.value)}
+              >
+                {opt.label}
+              </Button>
+            ))}
+          </ButtonGroup>
+          <Text variant="bodySm" as="p" tone="subdued">
+            {STRATEGY_OPTIONS.find((o) => o.value === strategy)?.description}
+          </Text>
+        </BlockStack>
+
+        {!showSuggestions && (
+          <Button
+            icon={WandIcon}
+            variant="primary"
+            onClick={handleGenerate}
+            loading={isLoading}
+          >
+            Get suggestions
+          </Button>
+        )}
+
+        {isLoading && (
+          <BlockStack gap="200">
+            <Text variant="bodySm" as="p" tone="subdued">
+              Analyzing your return data...
+            </Text>
+            <ProgressBar progress={75} size="small" />
+          </BlockStack>
+        )}
+
+        {showSuggestions && suggestions && (
+          <BlockStack gap="400">
+            <Divider />
+
+            {/* Analysis summary */}
+            <BlockStack gap="200">
+              <Text variant="headingSm" as="h3">
+                Analysis
+              </Text>
+              <InlineStack gap="300" wrap>
+                <Badge>
+                  {suggestions.analysis.totalReturns} returns analyzed
+                </Badge>
+                {suggestions.analysis.hasExistingRules && (
+                  <Badge tone="info">
+                    {suggestions.analysis.existingRuleCount} existing rules
+                  </Badge>
+                )}
+              </InlineStack>
+              {suggestions.analysis.topReasons.length > 0 && (
+                <BlockStack gap="100">
+                  <Text variant="bodySm" as="p" fontWeight="semibold">
+                    Top return reasons:
+                  </Text>
+                  {suggestions.analysis.topReasons.map((r) => (
+                    <InlineStack key={r.reason} gap="200" blockAlign="center">
+                      <Box minWidth="120px">
+                        <Text variant="bodySm" as="span">
+                          {REASON_LABELS[r.reason] ?? r.reason}
+                        </Text>
+                      </Box>
+                      <Box width="100%">
+                        <ProgressBar
+                          progress={r.percentage}
+                          size="small"
+                          tone="primary"
+                        />
+                      </Box>
+                      <Text variant="bodySm" as="span" tone="subdued" numeric>
+                        {r.percentage}%
+                      </Text>
+                    </InlineStack>
+                  ))}
+                </BlockStack>
+              )}
+              {suggestions.analysis.totalReturns === 0 && (
+                <Banner tone="info">
+                  <p>No return data yet — suggestions are based on industry best practices.</p>
+                </Banner>
+              )}
+            </BlockStack>
+
+            <Divider />
+
+            {/* Suggested rules */}
+            <BlockStack gap="300">
+              <Text variant="headingSm" as="h3">
+                Suggested rules ({suggestions.suggestions.length})
+              </Text>
+              {suggestions.suggestions.map((rule, i) => (
+                <Card key={i}>
+                  <BlockStack gap="200">
+                    <InlineStack align="space-between" blockAlign="center">
+                      <Text variant="bodyMd" as="p" fontWeight="semibold">
+                        {rule.name}
+                      </Text>
+                      <InlineStack gap="200">
+                        <Badge tone="success">
+                          +{rule.bonusPercent}%
+                        </Badge>
+                        <Badge>
+                          Priority {rule.priority}
+                        </Badge>
+                      </InlineStack>
+                    </InlineStack>
+                    <InlineStack gap="200" wrap>
+                      {rule.returnReason && (
+                        <Badge tone="info">
+                          {REASON_LABELS[rule.returnReason] ?? rule.returnReason}
+                        </Badge>
+                      )}
+                      {rule.orderValueMin != null && (
+                        <Badge>Orders ${rule.orderValueMin}+</Badge>
+                      )}
+                      {!rule.returnReason && !rule.orderValueMin && (
+                        <Badge>All returns</Badge>
+                      )}
+                    </InlineStack>
+                    <Text variant="bodySm" as="p" tone="subdued">
+                      {rule.rationale}
+                    </Text>
+                  </BlockStack>
+                </Card>
+              ))}
+            </BlockStack>
+
+            {/* Actions */}
+            <InlineStack gap="300">
+              <Button
+                variant="primary"
+                onClick={handleApply}
+                loading={isApplying}
+              >
+                Apply all suggestions
+              </Button>
+              <Button onClick={() => setShowSuggestions(false)}>
+                Dismiss
+              </Button>
+              <Button
+                variant="plain"
+                onClick={handleGenerate}
+                loading={isLoading}
+              >
+                Regenerate
+              </Button>
+            </InlineStack>
+          </BlockStack>
+        )}
+      </BlockStack>
+    </Card>
+  );
+}
+
 // -- Page --
 
 export default function RulesPage() {
@@ -529,6 +783,8 @@ export default function RulesPage() {
       <Layout>
         <Layout.Section>
           <BlockStack gap="400">
+            <AISuggestionsCard />
+
             <Banner tone="info">
               <p>
                 Rules are evaluated by priority (highest first). The first matching rule determines the offer shown to the customer.
