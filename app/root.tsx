@@ -13,10 +13,8 @@ export default function App() {
         />
         <Meta />
         <Links />
-        <style dangerouslySetInnerHTML={{ __html: `body.loading{opacity:0}body{transition:opacity .1s ease-in}` }} />
-        <script dangerouslySetInnerHTML={{ __html: `document.addEventListener("DOMContentLoaded",function(){document.body.classList.remove("loading")})` }} />
       </head>
-      <body className="loading">
+      <body>
         <Outlet />
         <ScrollRestoration />
         <Scripts />
