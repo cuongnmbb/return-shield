@@ -6,7 +6,12 @@
       "WebFetch(domain:shopify.dev)",
       "Bash(git add app/routes/app._index.tsx app/routes/app.additional.tsx app/routes/app.tsx package-lock.json package.json shopify.app.toml docs/)",
       "Bash(git commit:*)",
-      "Bash(git push origin main)"
+      "Bash(git push origin main)",
+      "Bash(npm ls @shopify/polaris)",
+      "WebFetch(domain:polaris.shopify.com)",
+      "WebFetch(domain:polaris-react.shopify.com)",
+      "WebSearch",
+      "Bash(git add -A)"
     ]
   }
 }
