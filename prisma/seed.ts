@@ -7,7 +7,7 @@ import { PrismaClient } from "@prisma/client";
 
 const prisma = new PrismaClient();
 
-const SHOP = "dev-store.myshopify.com";
+const SHOP = "bevis-dev-2.myshopify.com";
 
 const REQUESTS = [
   {
