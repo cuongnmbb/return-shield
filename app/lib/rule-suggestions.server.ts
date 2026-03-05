@@ -37,27 +37,27 @@ const STRATEGY_MULTIPLIER: Record<Strategy, number> = {
 
 // Base bonus percentages for each return reason category
 const REASON_BASE_BONUS: Record<string, { bonus: number; label: string; category: string }> = {
-  DEFECTIVE: { bonus: 20, label: "Defective / Damaged", category: "merchant_fault" },
-  WRONG_ITEM: { bonus: 18, label: "Wrong item shipped", category: "merchant_fault" },
+  DEFECTIVE: { bonus: 20, label: "Defective", category: "merchant_fault" },
+  WRONG_ITEM: { bonus: 18, label: "Wrong item", category: "merchant_fault" },
   NOT_AS_DESCRIBED: { bonus: 16, label: "Not as described", category: "merchant_fault" },
   SIZE_TOO_SMALL: { bonus: 12, label: "Size too small", category: "preference" },
   SIZE_TOO_LARGE: { bonus: 12, label: "Size too large", category: "preference" },
-  SIZE_ISSUE: { bonus: 12, label: "Size issue", category: "preference" },
-  COLOR: { bonus: 10, label: "Color not as expected", category: "preference" },
-  CHANGE_OF_MIND: { bonus: 8, label: "Changed mind", category: "preference" },
-  OTHER: { bonus: 8, label: "Other reason", category: "other" },
+  COLOR: { bonus: 10, label: "Color", category: "preference" },
+  STYLE: { bonus: 10, label: "Style", category: "preference" },
+  UNWANTED: { bonus: 8, label: "Unwanted", category: "preference" },
+  OTHER: { bonus: 8, label: "Other", category: "other" },
 };
 
 const REASON_LABELS: Record<string, string> = {
-  DEFECTIVE: "Defective / Damaged",
-  WRONG_ITEM: "Wrong item",
-  SIZE_ISSUE: "Size issue",
-  SIZE_TOO_SMALL: "Size too small",
-  SIZE_TOO_LARGE: "Size too large",
-  COLOR: "Color not as expected",
-  CHANGE_OF_MIND: "Changed mind",
+  COLOR: "Color",
+  DEFECTIVE: "Defective",
   NOT_AS_DESCRIBED: "Not as described",
   OTHER: "Other",
+  SIZE_TOO_LARGE: "Size too large",
+  SIZE_TOO_SMALL: "Size too small",
+  STYLE: "Style",
+  UNWANTED: "Unwanted",
+  WRONG_ITEM: "Wrong item",
 };
 
 // ── Analysis ───────────────────────────────────────────────────────────
@@ -134,7 +134,7 @@ export async function generateRuleSuggestions(
   }
 
   // 2. Generate rules for customer-preference reasons
-  const preferenceReasons = ["SIZE_ISSUE", "COLOR", "CHANGE_OF_MIND"];
+  const preferenceReasons = ["SIZE_TOO_SMALL", "SIZE_TOO_LARGE", "COLOR", "STYLE", "UNWANTED"];
   for (const reason of preferenceReasons) {
     if (existingReasons.has(reason)) continue;
     const base = REASON_BASE_BONUS[reason];

@@ -78,13 +78,15 @@ interface ActionData {
 
 const RETURN_REASONS = [
   { label: "Any reason", value: "" },
-  { label: "Defective / Damaged", value: "DEFECTIVE" },
-  { label: "Wrong item", value: "WRONG_ITEM" },
-  { label: "Size issue", value: "SIZE_ISSUE" },
-  { label: "Color not as expected", value: "COLOR" },
-  { label: "Changed mind", value: "CHANGE_OF_MIND" },
+  { label: "Color", value: "COLOR" },
+  { label: "Defective", value: "DEFECTIVE" },
   { label: "Not as described", value: "NOT_AS_DESCRIBED" },
   { label: "Other", value: "OTHER" },
+  { label: "Size too large", value: "SIZE_TOO_LARGE" },
+  { label: "Size too small", value: "SIZE_TOO_SMALL" },
+  { label: "Style", value: "STYLE" },
+  { label: "Unwanted", value: "UNWANTED" },
+  { label: "Wrong item", value: "WRONG_ITEM" },
 ];
 
 const OFFER_TYPES = [
@@ -106,13 +108,15 @@ const OFFER_TONES: Record<string, BadgeProps["tone"]> = {
 };
 
 const REASON_LABELS: Record<string, string> = {
-  DEFECTIVE: "Defective / Damaged",
-  WRONG_ITEM: "Wrong item",
-  SIZE_ISSUE: "Size issue",
-  COLOR: "Color not as expected",
-  CHANGE_OF_MIND: "Changed mind",
+  COLOR: "Color",
+  DEFECTIVE: "Defective",
   NOT_AS_DESCRIBED: "Not as described",
   OTHER: "Other",
+  SIZE_TOO_LARGE: "Size too large",
+  SIZE_TOO_SMALL: "Size too small",
+  STYLE: "Style",
+  UNWANTED: "Unwanted",
+  WRONG_ITEM: "Wrong item",
 };
 
 // -- Server --
