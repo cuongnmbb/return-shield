@@ -209,6 +209,14 @@ interface FulfillmentLineItem {
   };
 }
 
+interface PortalConfig {
+  portalEnabled: boolean;
+  returnWindowDays: number;
+  welcomeMessage: string;
+  storeCreditEnabled: boolean;
+  requireReason: boolean;
+}
+
 interface LoaderData {
   order: {
     id: string;
@@ -221,6 +229,7 @@ interface LoaderData {
   lineItems: FulfillmentLineItem[];
   shop: string;
   photoPolicy: { required: boolean; maxCount: number };
+  portalConfig: PortalConfig;
   error?: string;
 }
 
@@ -244,17 +253,54 @@ interface ActionData {
 }
 
 const DEFAULT_PHOTO_POLICY = { required: false, maxCount: 3 };
+const DEFAULT_PORTAL_CONFIG: PortalConfig = {
+  portalEnabled: true,
+  returnWindowDays: 30,
+  welcomeMessage: "",
+  storeCreditEnabled: true,
+  requireReason: true,
+};
+
+async function getPortalConfig(shop: string): Promise<PortalConfig> {
+  try {
+    const row = await prisma.portalSetting.findUnique({ where: { shop } });
+    if (!row) return DEFAULT_PORTAL_CONFIG;
+    return {
+      portalEnabled: row.portalEnabled,
+      returnWindowDays: row.returnWindowDays,
+      welcomeMessage: row.welcomeMessage,
+      storeCreditEnabled: row.storeCreditEnabled,
+      requireReason: row.requireReason,
+    };
+  } catch {
+    return DEFAULT_PORTAL_CONFIG;
+  }
+}
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const url = new URL(request.url);
   const shop = url.searchParams.get("shop") || "";
   const orderId = url.searchParams.get("orderId") || "";
 
-  const photoPolicy = shop
-    ? await import("../models/returnPhoto.server")
-        .then((m) => m.getPhotoPolicy(shop))
-        .catch(() => DEFAULT_PHOTO_POLICY)
-    : DEFAULT_PHOTO_POLICY;
+  const [photoPolicy, portalConfig] = await Promise.all([
+    shop
+      ? import("../models/returnPhoto.server")
+          .then((m) => m.getPhotoPolicy(shop))
+          .catch(() => DEFAULT_PHOTO_POLICY)
+      : Promise.resolve(DEFAULT_PHOTO_POLICY),
+    shop ? getPortalConfig(shop) : Promise.resolve(DEFAULT_PORTAL_CONFIG),
+  ]);
+
+  if (!portalConfig.portalEnabled) {
+    return {
+      order: { id: "", name: "", email: "", createdAt: "", customerId: null, currencyCode: "USD" },
+      lineItems: [],
+      shop,
+      photoPolicy,
+      portalConfig,
+      error: "The return portal is currently disabled. Please contact the store for assistance.",
+    } satisfies LoaderData;
+  }
 
   if (!shop || !orderId) {
     return {
@@ -262,6 +308,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       lineItems: [],
       shop,
       photoPolicy,
+      portalConfig,
       error: "Missing required parameters.",
     } satisfies LoaderData;
   }
@@ -326,13 +373,14 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     if (!order) {
       if (process.env.NODE_ENV !== "production") {
         const mockData = getMockOrderData(orderId);
-        if (mockData) return { ...mockData, shop, photoPolicy } satisfies LoaderData;
+        if (mockData) return { ...mockData, shop, photoPolicy, portalConfig } satisfies LoaderData;
       }
       return {
         order: { id: "", name: "", email: "", createdAt: "", customerId: null, currencyCode: "USD" },
         lineItems: [],
         shop,
         photoPolicy,
+        portalConfig,
         error: "Order not found.",
       } satisfies LoaderData;
     }
@@ -372,6 +420,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         lineItems: [],
         shop,
         photoPolicy,
+        portalConfig,
         error: "This order has no fulfilled items eligible for return.",
       } satisfies LoaderData;
     }
@@ -388,13 +437,14 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       lineItems,
       shop,
       photoPolicy,
+      portalConfig,
     } satisfies LoaderData;
   } catch (error) {
     console.error("Portal request loader error:", error);
 
     if (process.env.NODE_ENV !== "production") {
       const mockData = getMockOrderData(orderId);
-      if (mockData) return { ...mockData, shop, photoPolicy } satisfies LoaderData;
+      if (mockData) return { ...mockData, shop, photoPolicy, portalConfig } satisfies LoaderData;
     }
 
     return {
@@ -402,6 +452,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       lineItems: [],
       shop,
       photoPolicy,
+      portalConfig,
       error: "Unable to load order details. Please try again.",
     } satisfies LoaderData;
   }
@@ -783,7 +834,7 @@ function formatCurrency(amount: number, currencyCode: string): string {
 }
 
 export default function PortalRequest() {
-  const { order, lineItems, shop, photoPolicy, error: loaderError } =
+  const { order, lineItems, shop, photoPolicy, portalConfig, error: loaderError } =
     useLoaderData<typeof loader>() as LoaderData;
   const actionData = useActionData<typeof action>() as ActionData | undefined;
   const navigation = useNavigation();
@@ -820,20 +871,20 @@ export default function PortalRequest() {
   );
 
   const selectedItems = Object.entries(selections)
-    .filter(([, sel]) => sel.selected && sel.reason)
+    .filter(([, sel]) => sel.selected && (portalConfig.requireReason ? sel.reason : true))
     .map(([id, sel]) => ({
       fulfillmentLineItemId: id,
       quantity: sel.quantity,
-      returnReason: sel.reason,
+      returnReason: sel.reason || "OTHER",
       customerNote: sel.note,
     }));
 
   // Build prices array for store credit calculation
   const selectedPrices = Object.entries(selections)
-    .filter(([, sel]) => sel.selected && sel.reason)
+    .filter(([, sel]) => sel.selected && (portalConfig.requireReason ? sel.reason : true))
     .map(([id, sel]) => {
       const item = lineItems.find((li) => li.id === id);
-      return { price: item?.unitPrice || 0, quantity: sel.quantity, returnReason: sel.reason };
+      return { price: item?.unitPrice || 0, quantity: sel.quantity, returnReason: sel.reason || "OTHER" };
     });
 
   const hasSelections = Object.values(selections).some((s) => s.selected);
@@ -900,7 +951,7 @@ export default function PortalRequest() {
   }
 
   // ── Store credit offer ─────────────────────────────────────────────
-  if (actionData?.success && actionData?.offer) {
+  if (actionData?.success && actionData?.offer && portalConfig.storeCreditEnabled) {
     const { offer } = actionData;
     const bonusAmount = offer.creditAmount - offer.refundAmount;
 
@@ -1061,6 +1112,14 @@ export default function PortalRequest() {
       backAction={{ url: `/portal?shop=${encodeURIComponent(shop)}` }}
     >
       <Layout>
+        {portalConfig.welcomeMessage && (
+          <Layout.Section>
+            <Banner tone="info">
+              <p>{portalConfig.welcomeMessage}</p>
+            </Banner>
+          </Layout.Section>
+        )}
+
         <Layout.Section>
           <Card>
             <BlockStack gap="200">
@@ -1071,6 +1130,11 @@ export default function PortalRequest() {
                 {order.email} &middot;{" "}
                 {new Date(order.createdAt).toLocaleDateString()}
               </Text>
+              {portalConfig.returnWindowDays > 0 && (
+                <Text as="p" variant="bodySm" tone="subdued">
+                  Returns accepted within {portalConfig.returnWindowDays} days of delivery
+                </Text>
+              )}
             </BlockStack>
           </Card>
         </Layout.Section>

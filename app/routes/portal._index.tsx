@@ -1,6 +1,6 @@
 import { useState } from "react";
-import type { ActionFunctionArgs } from "react-router";
-import { useActionData, useSearchParams, useNavigation, Form } from "react-router";
+import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
+import { useActionData, useLoaderData, useSearchParams, useNavigation, Form } from "react-router";
 import {
   Page,
   Layout,
@@ -13,6 +13,12 @@ import {
   Box,
 } from "@shopify/polaris";
 import { unauthenticated } from "../shopify.server";
+import prisma from "../db.server";
+
+interface PortalLoaderData {
+  portalEnabled: boolean;
+  welcomeMessage: string;
+}
 
 interface ActionData {
   error?: string;
@@ -20,6 +26,21 @@ interface ActionData {
   orderName?: string;
   shop?: string;
 }
+
+export const loader = async ({ request }: LoaderFunctionArgs) => {
+  const url = new URL(request.url);
+  const shop = url.searchParams.get("shop") || "";
+  if (!shop) return { portalEnabled: true, welcomeMessage: "" } satisfies PortalLoaderData;
+  try {
+    const row = await prisma.portalSetting.findUnique({ where: { shop } });
+    return {
+      portalEnabled: row?.portalEnabled ?? true,
+      welcomeMessage: row?.welcomeMessage ?? "",
+    } satisfies PortalLoaderData;
+  } catch {
+    return { portalEnabled: true, welcomeMessage: "" } satisfies PortalLoaderData;
+  }
+};
 
 // ── Mock data (dev only) ───────────────────────────────────────────────
 // TODO: Remove mock data before production deployment
@@ -130,6 +151,7 @@ function handleMockLookup(
 }
 
 export default function PortalIndex() {
+  const { portalEnabled, welcomeMessage } = useLoaderData<typeof loader>() as PortalLoaderData;
   const actionData = useActionData<typeof action>() as ActionData | undefined;
   const [searchParams] = useSearchParams();
   const navigation = useNavigation();
@@ -139,6 +161,25 @@ export default function PortalIndex() {
   const [email, setEmail] = useState("");
 
   const isSubmitting = navigation.state === "submitting";
+
+  // Portal disabled
+  if (!portalEnabled) {
+    return (
+      <Page title="Return Portal" narrowWidth>
+        <Layout>
+          <Layout.Section>
+            <Card>
+              <Banner tone="warning">
+                <Text as="p">
+                  The return portal is currently unavailable. Please contact the store directly for return requests.
+                </Text>
+              </Banner>
+            </Card>
+          </Layout.Section>
+        </Layout>
+      </Page>
+    );
+  }
 
   // If we got a successful lookup, redirect to the request page
   if (actionData?.orderId && actionData?.shop) {
@@ -192,7 +233,7 @@ export default function PortalIndex() {
             <BlockStack gap="400">
               <Banner tone="info">
                 <Text as="p">
-                  Enter your order number and email address to start a return request.
+                  {welcomeMessage || "Enter your order number and email address to start a return request."}
                 </Text>
               </Banner>
 

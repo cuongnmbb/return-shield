@@ -178,3 +178,18 @@ model PhotoPolicy {
   maxCount  Int      @default(3)
   updatedAt DateTime @updatedAt
 }
+
+// ─── Portal Settings ─────────────────────────────────────────────────────────
+
+model PortalSetting {
+  id                  String   @id @default(uuid())
+  shop                String   @unique
+  portalEnabled       Boolean  @default(true)
+  returnWindowDays    Int      @default(30)
+  welcomeMessage      String   @default("")
+  storeCreditEnabled  Boolean  @default(true)
+  autoApprove         Boolean  @default(false)
+  requireReason       Boolean  @default(true)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+}
