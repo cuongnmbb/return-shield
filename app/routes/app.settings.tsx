@@ -63,15 +63,26 @@ interface ActionData {
 // ─── Server helpers ───────────────────────────────────────────────────────────
 
 async function getPortalSettings(shop: string): Promise<PortalSettings> {
-  const row = await prisma.portalSetting.findUnique({ where: { shop } });
-  return {
-    portalEnabled: row?.portalEnabled ?? true,
-    returnWindowDays: row?.returnWindowDays ?? 30,
-    welcomeMessage: row?.welcomeMessage ?? "",
-    storeCreditEnabled: row?.storeCreditEnabled ?? true,
-    autoApprove: row?.autoApprove ?? false,
-    requireReason: row?.requireReason ?? true,
-  };
+  try {
+    const row = await prisma.portalSetting.findUnique({ where: { shop } });
+    return {
+      portalEnabled: row?.portalEnabled ?? true,
+      returnWindowDays: row?.returnWindowDays ?? 30,
+      welcomeMessage: row?.welcomeMessage ?? "",
+      storeCreditEnabled: row?.storeCreditEnabled ?? true,
+      autoApprove: row?.autoApprove ?? false,
+      requireReason: row?.requireReason ?? true,
+    };
+  } catch {
+    return {
+      portalEnabled: true,
+      returnWindowDays: 30,
+      welcomeMessage: "",
+      storeCreditEnabled: true,
+      autoApprove: false,
+      requireReason: true,
+    };
+  }
 }
 
 // ─── Loader ──────────────────────────────────────────────────────────────────
