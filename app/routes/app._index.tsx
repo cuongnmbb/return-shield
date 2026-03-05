@@ -41,6 +41,7 @@ interface ReturnLineItem {
 interface ReturnItem {
   [key: string]: unknown;
   id: string;
+  localDbId?: string;
   name: string;
   status: string;
   createdAt: string;
@@ -369,6 +370,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       }
       returns.push({
         id: lr.shopifyReturnId || lr.id,
+        localDbId: lr.id,
         name: `${lr.orderName}-R1`,
         status: lr.status === "SUBMITTED" ? "REQUESTED" : lr.status,
         createdAt: lr.createdAt.toISOString(),
@@ -418,17 +420,29 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const formData = await request.formData();
   const intent = formData.get("intent") as string;
   const returnId = formData.get("returnId") as string;
+  const localDbId = formData.get("localDbId") as string | null;
+  const returnName = (formData.get("returnName") as string) || "";
 
   if (!returnId || !intent) {
     return { success: false, intent: intent ?? "", error: "Missing data" };
   }
 
-  if (returnId.includes("mock")) {
-    return {
-      success: true,
-      intent,
-      returnName: "Mock return",
-    } satisfies ActionData;
+  // Determine if this is a real Shopify Return GID
+  const isRealShopifyReturn =
+    returnId.startsWith("gid://shopify/Return/") && !returnId.includes("mock");
+
+  // Local-only return (portal submission without a Shopify return) — update DB only
+  if (!isRealShopifyReturn) {
+    if (localDbId) {
+      try {
+        const { updateReturnStatus } = await import("../models/returnRequest.server");
+        const newStatus = intent === "approve" ? "APPROVED" : "REJECTED";
+        await updateReturnStatus(localDbId, newStatus as "APPROVED" | "REJECTED", `${intent === "approve" ? "Approved" : "Declined"} by merchant.`);
+      } catch (err) {
+        console.error("Failed to update local return status:", err);
+      }
+    }
+    return { success: true, intent, returnName: returnName || "Return" } satisfies ActionData;
   }
 
   const mutation =
@@ -451,6 +465,17 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       intent,
       error: userErrors.map((e: { message: string }) => e.message).join(", "),
     } satisfies ActionData;
+  }
+
+  // Also sync status to local DB if we have a record
+  if (localDbId) {
+    try {
+      const { updateReturnStatus } = await import("../models/returnRequest.server");
+      const newStatus = intent === "approve" ? "APPROVED" : "REJECTED";
+      await updateReturnStatus(localDbId, newStatus as "APPROVED" | "REJECTED", `${intent === "approve" ? "Approved" : "Declined"} via Shopify.`);
+    } catch (err) {
+      console.error("Failed to sync local return status:", err);
+    }
   }
 
   return {
@@ -574,6 +599,8 @@ function ReturnActions({ returnItem }: { returnItem: ReturnItem }) {
     <InlineStack gap="300" blockAlign="center" wrap={false}>
       <fetcher.Form method="post">
         <input type="hidden" name="returnId" value={returnItem.id} />
+        <input type="hidden" name="localDbId" value={returnItem.localDbId ?? ""} />
+        <input type="hidden" name="returnName" value={returnItem.name} />
         <input type="hidden" name="intent" value="approve" />
         <Button
           variant="primary"
@@ -588,6 +615,8 @@ function ReturnActions({ returnItem }: { returnItem: ReturnItem }) {
       </fetcher.Form>
       <fetcher.Form method="post">
         <input type="hidden" name="returnId" value={returnItem.id} />
+        <input type="hidden" name="localDbId" value={returnItem.localDbId ?? ""} />
+        <input type="hidden" name="returnName" value={returnItem.name} />
         <input type="hidden" name="intent" value="decline" />
         <Button
           tone="critical"
