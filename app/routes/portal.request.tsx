@@ -24,13 +24,13 @@ import {
   Badge,
 } from "@shopify/polaris";
 import { unauthenticated } from "../shopify.server";
-import prisma from "../db.server";
 import {
   calculateStoreCreditOffer,
   createStoreCreditOffer,
   updateStoreCreditOfferStatus,
   seedReturnRules,
 } from "../lib/store-credit.server";
+import { createReturnRequest } from "../models/returnRequest.server";
 
 // ── Mock data (dev only) ───────────────────────────────────────────────
 // TODO: Remove mock data before production deployment
@@ -565,24 +565,18 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const ruleShop = shop || "mock-shop";
     await seedReturnRules(ruleShop);
 
-    // Save to local ReturnRequest table so it shows on the dashboard
-    const reasons = items.map((i) => i.returnReason).filter(Boolean);
-    const notes = items.map((i) => i.customerNote).filter(Boolean);
     try {
-      await prisma.returnRequest.create({
-        data: {
-          shop: ruleShop,
-          shopifyReturnId: returnId,
-          orderId,
-          orderName,
-          customerEmail: customerEmail || "unknown",
-          reason: reasons.join(", "),
-          notes: notes.join("; "),
-          status: "REQUESTED",
-        },
+      await createReturnRequest({
+        shop: ruleShop,
+        shopifyReturnId: returnId,
+        orderName,
+        orderId,
+        customerEmail,
+        customerName: "",
+        reason: items.map(i => i.returnReason).filter(Boolean).join("; "),
       });
     } catch (err) {
-      console.error("Failed to save ReturnRequest:", err);
+      console.error("Failed to save mock ReturnRequest to DB:", err);
     }
 
     // Calculate store credit offer
@@ -668,25 +662,21 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     }
 
     const returnId = result.return.id;
+    const customerEmail = String(formData.get("customerEmail") || "");
 
-    // Save to local ReturnRequest table so it shows on the dashboard
-    const reasons = items.map((i) => i.returnReason).filter(Boolean);
-    const notes = items.map((i) => i.customerNote).filter(Boolean);
+    // Save to local DB so it appears in /app/returns (non-blocking)
     try {
-      await prisma.returnRequest.create({
-        data: {
-          shop,
-          shopifyReturnId: returnId,
-          orderId,
-          orderName,
-          customerEmail: customerEmail || "unknown",
-          reason: reasons.join(", "),
-          notes: notes.join("; "),
-          status: "REQUESTED",
-        },
+      await createReturnRequest({
+        shop,
+        shopifyReturnId: returnId,
+        orderName,
+        orderId,
+        customerEmail,
+        customerName: "",
+        reason: items.map(i => i.returnReason).filter(Boolean).join("; "),
       });
     } catch (err) {
-      console.error("Failed to save ReturnRequest:", err);
+      console.error("Failed to save ReturnRequest to DB:", err);
     }
 
     // Calculate store credit offer (non-blocking — don't crash if it fails)
@@ -1151,8 +1141,8 @@ export default function PortalRequest() {
                 <input type="hidden" name="shop" value={shop} />
                 <input type="hidden" name="orderId" value={order.id} />
                 <input type="hidden" name="orderName" value={order.name} />
-                <input type="hidden" name="customerId" value={order.customerId || ""} />
                 <input type="hidden" name="customerEmail" value={order.email || ""} />
+                <input type="hidden" name="customerId" value={order.customerId || ""} />
                 <input type="hidden" name="currencyCode" value={order.currencyCode} />
                 <input
                   type="hidden"
