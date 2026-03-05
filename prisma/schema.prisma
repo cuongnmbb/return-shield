@@ -32,3 +32,32 @@ model Session {
   refreshToken        String?
   refreshTokenExpires DateTime?
 }
+
+model StoreCreditRule {
+  id              String   @id @default(uuid())
+  shop            String   @unique
+  enabled         Boolean  @default(true)
+  bonusPercentage Float    @default(10)
+  minOrderAmount  Float    @default(0)
+  maxCreditAmount Float    @default(500)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model StoreCreditOffer {
+  id            String   @id @default(uuid())
+  shop          String
+  orderId       String
+  orderName     String
+  returnId      String
+  customerId    String?
+  refundAmount  Float
+  creditAmount  Float
+  currencyCode  String   @default("USD")
+  status        String   @default("PENDING")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([shop])
+  @@index([returnId])
+}
