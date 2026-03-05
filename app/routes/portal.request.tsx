@@ -28,6 +28,7 @@ import {
   calculateStoreCreditOffer,
   createStoreCreditOffer,
   updateStoreCreditOfferStatus,
+  seedReturnRules,
 } from "../lib/store-credit.server";
 
 // ── Mock data (dev only) ───────────────────────────────────────────────
@@ -533,7 +534,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     returnReason: string;
     customerNote: string;
   }>;
-  let prices: Array<{ price: number; quantity: number }>;
+  let prices: Array<{ price: number; quantity: number; returnReason?: string; productType?: string }>;
 
   try {
     items = JSON.parse(itemsJson);
@@ -559,6 +560,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   if (process.env.NODE_ENV !== "production" && orderId.includes("mock")) {
     console.log("Mock return request submitted:", { orderId, items });
     const returnId = "gid://shopify/Return/mock-new";
+    const ruleShop = shop || "mock-shop";
+    await seedReturnRules(ruleShop);
 
     // Calculate store credit offer
     try {
@@ -744,7 +747,7 @@ export default function PortalRequest() {
     .filter(([, sel]) => sel.selected && sel.reason)
     .map(([id, sel]) => {
       const item = lineItems.find((li) => li.id === id);
-      return { price: item?.unitPrice || 0, quantity: sel.quantity };
+      return { price: item?.unitPrice || 0, quantity: sel.quantity, returnReason: sel.reason };
     });
 
   const hasSelections = Object.values(selections).some((s) => s.selected);
