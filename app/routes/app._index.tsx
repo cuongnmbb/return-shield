@@ -27,6 +27,7 @@ import type { TabProps, BadgeProps } from "@shopify/polaris";
 import { CheckIcon, XIcon, ExternalIcon } from "@shopify/polaris-icons";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
+import prisma from "../db.server";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 
 // ── Types ──────────────────────────────────────────────────────────────
@@ -351,6 +352,36 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         ),
       });
     }
+  }
+
+  // Merge portal-submitted returns from local DB
+  try {
+    const localReturns = await prisma.returnRequest.findMany({
+      where: { shop },
+      orderBy: { createdAt: "desc" },
+      take: 50,
+    });
+
+    for (const lr of localReturns) {
+      // Skip if this return is already in the Shopify results
+      if (lr.shopifyReturnId && returns.some((r) => r.id === lr.shopifyReturnId)) {
+        continue;
+      }
+      returns.push({
+        id: lr.shopifyReturnId || lr.id,
+        name: `${lr.orderName}-R1`,
+        status: lr.status === "SUBMITTED" ? "REQUESTED" : lr.status,
+        createdAt: lr.createdAt.toISOString(),
+        totalQuantity: 1,
+        orderName: lr.orderName,
+        orderId: lr.orderId,
+        returnLineItems: lr.reason
+          ? [{ quantity: 1, returnReasonNote: lr.reason, productTitle: "Portal return" }]
+          : [],
+      });
+    }
+  } catch (err) {
+    console.error("Failed to fetch local ReturnRequests:", err);
   }
 
   if (returns.length === 0 && process.env.NODE_ENV !== "production") {
