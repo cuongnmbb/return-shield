@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 import type { LoaderFunctionArgs, ActionFunctionArgs } from "react-router";
 import {
   useLoaderData,
@@ -176,13 +176,12 @@ const MOCK_ORDERS: Record<
   },
 };
 
-function getMockOrderData(orderId: string): LoaderData | null {
+function getMockOrderData(orderId: string): Omit<LoaderData, "shop" | "photoPolicy"> | null {
   const mock = MOCK_ORDERS[orderId];
   if (!mock) return null;
   return {
     order: mock.order,
     lineItems: mock.lineItems,
-    shop: "",
   };
 }
 
@@ -221,6 +220,7 @@ interface LoaderData {
   };
   lineItems: FulfillmentLineItem[];
   shop: string;
+  photoPolicy: { required: boolean; maxCount: number };
   error?: string;
 }
 
@@ -243,16 +243,25 @@ interface ActionData {
   currencyCode?: string;
 }
 
+const DEFAULT_PHOTO_POLICY = { required: false, maxCount: 3 };
+
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const url = new URL(request.url);
   const shop = url.searchParams.get("shop") || "";
   const orderId = url.searchParams.get("orderId") || "";
+
+  const photoPolicy = shop
+    ? await import("../models/returnPhoto.server")
+        .then((m) => m.getPhotoPolicy(shop))
+        .catch(() => DEFAULT_PHOTO_POLICY)
+    : DEFAULT_PHOTO_POLICY;
 
   if (!shop || !orderId) {
     return {
       order: { id: "", name: "", email: "", createdAt: "", customerId: null, currencyCode: "USD" },
       lineItems: [],
       shop,
+      photoPolicy,
       error: "Missing required parameters.",
     } satisfies LoaderData;
   }
@@ -317,12 +326,13 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     if (!order) {
       if (process.env.NODE_ENV !== "production") {
         const mockData = getMockOrderData(orderId);
-        if (mockData) return { ...mockData, shop } satisfies LoaderData;
+        if (mockData) return { ...mockData, shop, photoPolicy } satisfies LoaderData;
       }
       return {
         order: { id: "", name: "", email: "", createdAt: "", customerId: null, currencyCode: "USD" },
         lineItems: [],
         shop,
+        photoPolicy,
         error: "Order not found.",
       } satisfies LoaderData;
     }
@@ -361,6 +371,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         },
         lineItems: [],
         shop,
+        photoPolicy,
         error: "This order has no fulfilled items eligible for return.",
       } satisfies LoaderData;
     }
@@ -376,19 +387,21 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       },
       lineItems,
       shop,
+      photoPolicy,
     } satisfies LoaderData;
   } catch (error) {
     console.error("Portal request loader error:", error);
 
     if (process.env.NODE_ENV !== "production") {
       const mockData = getMockOrderData(orderId);
-      if (mockData) return { ...mockData, shop } satisfies LoaderData;
+      if (mockData) return { ...mockData, shop, photoPolicy } satisfies LoaderData;
     }
 
     return {
       order: { id: "", name: "", email: "", createdAt: "", customerId: null, currencyCode: "USD" },
       lineItems: [],
       shop,
+      photoPolicy,
       error: "Unable to load order details. Please try again.",
     } satisfies LoaderData;
   }
@@ -565,8 +578,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const ruleShop = shop || "mock-shop";
     await seedReturnRules(ruleShop);
 
+    let mockDbId: string | null = null;
     try {
-      await createReturnRequest({
+      const dbRecord = await createReturnRequest({
         shop: ruleShop,
         shopifyReturnId: returnId,
         orderName,
@@ -575,8 +589,25 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         customerName: "",
         reason: items.map(i => i.returnReason).filter(Boolean).join("; "),
       });
+      mockDbId = dbRecord.id;
     } catch (err) {
       console.error("Failed to save mock ReturnRequest to DB:", err);
+    }
+
+    // Save uploaded photos
+    if (mockDbId) {
+      const { addPhoto, validateImageFile } = await import("../models/returnPhoto.server");
+      const photoFiles = formData.getAll("photos") as File[];
+      for (const file of photoFiles) {
+        if (!file || file.size === 0) continue;
+        if (validateImageFile(file)) continue;
+        try {
+          const buffer = Buffer.from(await file.arrayBuffer());
+          await addPhoto({ returnRequestId: mockDbId, filename: file.name, mimeType: file.type, data: buffer, sizeBytes: file.size });
+        } catch (err) {
+          console.error("Failed to save photo:", err);
+        }
+      }
     }
 
     // Calculate store credit offer
@@ -665,8 +696,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const customerEmail = String(formData.get("customerEmail") || "");
 
     // Save to local DB so it appears in /app/returns (non-blocking)
+    let dbRequestId: string | null = null;
     try {
-      await createReturnRequest({
+      const dbRecord = await createReturnRequest({
         shop,
         shopifyReturnId: returnId,
         orderName,
@@ -675,8 +707,25 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         customerName: "",
         reason: items.map(i => i.returnReason).filter(Boolean).join("; "),
       });
+      dbRequestId = dbRecord.id;
     } catch (err) {
       console.error("Failed to save ReturnRequest to DB:", err);
+    }
+
+    // Save uploaded photos
+    if (dbRequestId) {
+      const { addPhoto, validateImageFile } = await import("../models/returnPhoto.server");
+      const photoFiles = formData.getAll("photos") as File[];
+      for (const file of photoFiles) {
+        if (!file || file.size === 0) continue;
+        if (validateImageFile(file)) continue;
+        try {
+          const buffer = Buffer.from(await file.arrayBuffer());
+          await addPhoto({ returnRequestId: dbRequestId, filename: file.name, mimeType: file.type, data: buffer, sizeBytes: file.size });
+        } catch (err) {
+          console.error("Failed to save photo:", err);
+        }
+      }
     }
 
     // Calculate store credit offer (non-blocking — don't crash if it fails)
@@ -734,11 +783,16 @@ function formatCurrency(amount: number, currencyCode: string): string {
 }
 
 export default function PortalRequest() {
-  const { order, lineItems, shop, error: loaderError } =
+  const { order, lineItems, shop, photoPolicy, error: loaderError } =
     useLoaderData<typeof loader>() as LoaderData;
   const actionData = useActionData<typeof action>() as ActionData | undefined;
   const navigation = useNavigation();
   const isSubmitting = navigation.state === "submitting";
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [photoFiles, setPhotoFiles] = useState<File[]>([]);
+  const [photoPreviews, setPhotoPreviews] = useState<string[]>([]);
+  const [photoError, setPhotoError] = useState<string | null>(null);
 
   const [selections, setSelections] = useState<Record<string, ItemSelection>>(
     () => {
@@ -1123,6 +1177,54 @@ export default function PortalRequest() {
         <Layout.Section>
           <Card>
             <BlockStack gap="400">
+              <Text variant="headingSm" as="h2">
+                Upload photos {photoPolicy.required ? <Badge tone="attention">Required</Badge> : <Badge>Optional</Badge>}
+              </Text>
+              <Text as="p" variant="bodySm" tone="subdued">
+                Attach photos to help us assess your return.
+                Up to {photoPolicy.maxCount} photo{photoPolicy.maxCount > 1 ? "s" : ""}, max 5 MB each (JPEG, PNG, WebP, GIF).
+              </Text>
+
+              {photoError && (
+                <Banner tone="critical" onDismiss={() => setPhotoError(null)}>
+                  <Text as="p">{photoError}</Text>
+                </Banner>
+              )}
+
+              <Box
+                background="bg-surface-secondary"
+                borderRadius="200"
+                padding="400"
+              >
+                <BlockStack gap="300">
+                  <Button
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={isSubmitting}
+                  >
+                    {photoFiles.length > 0 ? `${photoFiles.length} photo${photoFiles.length > 1 ? "s" : ""} selected — change` : "Select photos"}
+                  </Button>
+
+                  {photoPreviews.length > 0 && (
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                      {photoPreviews.map((url, i) => (
+                        <img
+                          key={i}
+                          src={url}
+                          alt={`Preview ${i + 1}`}
+                          style={{ width: 72, height: 72, objectFit: "cover", borderRadius: 8, border: "2px solid #008060" }}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </BlockStack>
+              </Box>
+            </BlockStack>
+          </Card>
+        </Layout.Section>
+
+        <Layout.Section>
+          <Card>
+            <BlockStack gap="400">
               {actionData?.error && actionData?.intent === "submit_return" && (
                 <Banner tone="critical">
                   <Text as="p">{actionData.error}</Text>
@@ -1136,7 +1238,23 @@ export default function PortalRequest() {
                 </Text>
               )}
 
-              <Form method="post">
+              <Form
+                method="post"
+                encType="multipart/form-data"
+                onSubmit={(e) => {
+                  if (photoPolicy.required && photoFiles.length === 0) {
+                    e.preventDefault();
+                    setPhotoError("Please upload at least one photo before submitting.");
+                    return;
+                  }
+                  // Sync selected files into the hidden file input that lives inside the form
+                  if (fileInputRef.current && photoFiles.length > 0) {
+                    const dt = new DataTransfer();
+                    photoFiles.forEach(f => dt.items.add(f));
+                    fileInputRef.current.files = dt.files;
+                  }
+                }}
+              >
                 <input type="hidden" name="intent" value="submit_return" />
                 <input type="hidden" name="shop" value={shop} />
                 <input type="hidden" name="orderId" value={order.id} />
@@ -1144,15 +1262,27 @@ export default function PortalRequest() {
                 <input type="hidden" name="customerEmail" value={order.email || ""} />
                 <input type="hidden" name="customerId" value={order.customerId || ""} />
                 <input type="hidden" name="currencyCode" value={order.currencyCode} />
+                <input type="hidden" name="items" value={JSON.stringify(selectedItems)} />
+                <input type="hidden" name="prices" value={JSON.stringify(selectedPrices)} />
+                {/* File input — triggered by "Select photos" button above */}
                 <input
-                  type="hidden"
-                  name="items"
-                  value={JSON.stringify(selectedItems)}
-                />
-                <input
-                  type="hidden"
-                  name="prices"
-                  value={JSON.stringify(selectedPrices)}
+                  ref={fileInputRef}
+                  type="file"
+                  name="photos"
+                  multiple
+                  accept="image/jpeg,image/png,image/webp,image/gif"
+                  style={{ display: "none" }}
+                  onChange={(e) => {
+                    const files = Array.from(e.target.files ?? []);
+                    const valid = files.filter(f => f.size <= 5 * 1024 * 1024).slice(0, photoPolicy.maxCount);
+                    if (valid.length < files.length) {
+                      setPhotoError(`Some files were removed (exceeds 5 MB or max ${photoPolicy.maxCount} photos).`);
+                    } else {
+                      setPhotoError(null);
+                    }
+                    setPhotoFiles(valid);
+                    setPhotoPreviews(valid.map(f => URL.createObjectURL(f)));
+                  }}
                 />
                 <Button
                   variant="primary"
