@@ -1,3 +1,4 @@
+
 # Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
 
 client_id = "661999a5eb0e01499c6403ae4fa5931a"
@@ -30,3 +31,4 @@ subpath = "returns"
 
 [auth]
 redirect_urls = [ "https://example.com/api/auth" ]
+
