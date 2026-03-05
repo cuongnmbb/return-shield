@@ -625,8 +625,19 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   // Mock submission in development
   if (process.env.NODE_ENV !== "production" && orderId.includes("mock")) {
     console.log("Mock return request submitted:", { orderId, items });
-    const returnId = "gid://shopify/Return/mock-new";
-    const ruleShop = shop || "mock-shop";
+    const returnId = `gid://shopify/Return/mock-${Date.now()}`;
+
+    // Resolve the actual shop — fall back to the first session in the DB
+    let ruleShop = shop;
+    if (!ruleShop) {
+      try {
+        const db = await import("../db.server");
+        const session = await db.default.session.findFirst({ select: { shop: true } });
+        ruleShop = session?.shop ?? "mock-shop";
+      } catch {
+        ruleShop = "mock-shop";
+      }
+    }
     await seedReturnRules(ruleShop);
 
     let mockDbId: string | null = null;
