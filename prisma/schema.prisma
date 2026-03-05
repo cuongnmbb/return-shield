@@ -5,9 +5,6 @@ generator client {
   provider = "prisma-client-js"
 }
 
-// Note that some adapters may set a maximum length for the String type by default, please ensure your strings are long
-// enough when changing adapters.
-// See https://www.prisma.io/docs/orm/reference/prisma-schema-reference#string for more information
 datasource db {
   provider = "sqlite"
   url      = "file:dev.sqlite"
@@ -65,23 +62,22 @@ model StoreCreditOffer {
 }
 
 // ─── Return Status Tracking ───────────────────────────────────────────────────
-// ReturnStatus values (stored as String for SQLite compatibility):
-//   SUBMITTED | UNDER_REVIEW | APPROVED | REJECTED | COMPLETED
 
 model ReturnRequest {
   id              String          @id @default(cuid())
   shop            String
-  shopifyReturnId String?         @unique   // gid://shopify/Return/…
+  shopifyReturnId String?         @unique
   orderName       String
   orderId         String
   customerEmail   String
   customerName    String          @default("")
   reason          String          @default("")
   status          String          @default("SUBMITTED")
-  notes           String          @default("")    // internal merchant notes
+  notes           String          @default("")
   createdAt       DateTime        @default(now())
   updatedAt       DateTime        @updatedAt
   history         StatusHistory[]
+  photos          ReturnPhoto[]
 
   @@index([shop])
   @@index([status])
@@ -108,17 +104,12 @@ model ReturnRule {
   name          String
   priority      Int      @default(0)
   active        Boolean  @default(true)
-
-  // Conditions (null = match any)
   productType   String?
   returnReason  String?
   orderValueMin Float?
   orderValueMax Float?
-
-  // Actions
-  offerType     String   // "store_credit" | "exchange" | "refund"
+  offerType     String
   bonusPercent  Float    @default(0)
-
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
@@ -130,20 +121,12 @@ model ReturnRule {
 model NotificationSetting {
   id              String   @id @default(uuid())
   shop            String   @unique
-
-  // Email
   emailEnabled    Boolean  @default(false)
   emailAddress    String?
-
-  // Slack
   slackEnabled    Boolean  @default(false)
   slackWebhookUrl String?
-
-  // Delivery mode: "immediate" | "digest"
   deliveryMode    String   @default("immediate")
-  // For digest: cron hour (0-23) in UTC
   digestHourUtc   Int      @default(9)
-
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 }
@@ -151,14 +134,37 @@ model NotificationSetting {
 model NotificationLog {
   id          String   @id @default(uuid())
   shop        String
-  channel     String   // "email" | "slack"
+  channel     String
   returnId    String
   returnName  String
   orderName   String
-  status      String   // "pending" | "sent" | "failed"
+  status      String
   error       String?
   sentAt      DateTime?
   createdAt   DateTime @default(now())
 
   @@index([shop, status])
+}
+
+// ─── Photo Upload ─────────────────────────────────────────────────────────────
+
+model ReturnPhoto {
+  id              String        @id @default(cuid())
+  returnRequestId String
+  returnRequest   ReturnRequest @relation(fields: [returnRequestId], references: [id], onDelete: Cascade)
+  filename        String
+  mimeType        String
+  data            Bytes
+  sizeBytes       Int
+  createdAt       DateTime      @default(now())
+
+  @@index([returnRequestId])
+}
+
+model PhotoPolicy {
+  id        String   @id @default(cuid())
+  shop      String   @unique
+  required  Boolean  @default(false)
+  maxCount  Int      @default(3)
+  updatedAt DateTime @updatedAt
 }

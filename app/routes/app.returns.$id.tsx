@@ -47,6 +47,8 @@ import {
   canTransition,
 } from "../models/returnRequest.shared";
 import type { ReturnStatus } from "../models/returnRequest.shared";
+import { getPhotoMeta } from "../models/returnPhoto.server";
+import type { PhotoMeta } from "../models/returnPhoto.server";
 
 // ─── GraphQL ─────────────────────────────────────────────────────────────────
 
@@ -123,6 +125,7 @@ interface DbRecord {
   createdAt: string;
   updatedAt: string;
   history: HistoryEntry[];
+  photos: PhotoMeta[];
 }
 
 type LoaderData = {
@@ -148,6 +151,7 @@ export const loader = async ({ request, params }: LoaderFunctionArgs): Promise<L
 
   // ── Fetch from our DB ──
   const rawDb = await getReturnRequestByShopifyId(shopifyGid);
+  const photos = rawDb ? await getPhotoMeta(rawDb.id) : [];
   const dbRecord: DbRecord | null = rawDb
     ? {
         id: rawDb.id,
@@ -161,6 +165,7 @@ export const loader = async ({ request, params }: LoaderFunctionArgs): Promise<L
           note: h.note,
           changedAt: h.changedAt.toISOString(),
         })),
+        photos,
       }
     : null;
 
@@ -573,6 +578,46 @@ export default function ReturnDetailPage() {
                 )}
               </BlockStack>
             </Card>
+
+            {/* Photo gallery */}
+            {dbRecord && dbRecord.photos.length > 0 && (
+              <Card>
+                <BlockStack gap="300">
+                  <InlineStack align="space-between" blockAlign="center">
+                    <Text variant="headingSm" as="h2">
+                      Customer photos
+                    </Text>
+                    <Text as="span" variant="bodySm" tone="subdued">
+                      {dbRecord.photos.length} file{dbRecord.photos.length > 1 ? "s" : ""}
+                    </Text>
+                  </InlineStack>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
+                    {dbRecord.photos.map((photo) => (
+                      <a
+                        key={photo.id}
+                        href={`/photo/${photo.id}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        title={`${photo.filename} (${(photo.sizeBytes / 1024).toFixed(0)} KB)`}
+                      >
+                        <img
+                          src={`/photo/${photo.id}`}
+                          alt={photo.filename}
+                          style={{
+                            width: 80,
+                            height: 80,
+                            objectFit: "cover",
+                            borderRadius: 8,
+                            border: "1px solid #e5e5e5",
+                            display: "block",
+                          }}
+                        />
+                      </a>
+                    ))}
+                  </div>
+                </BlockStack>
+              </Card>
+            )}
 
             {/* Timeline */}
             {dbRecord && dbRecord.history.length > 0 && (
