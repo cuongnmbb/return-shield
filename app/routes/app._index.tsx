@@ -573,6 +573,7 @@ function SummaryCard({
 function ReturnActions({ returnItem }: { returnItem: ReturnItem }) {
   const fetcher = useFetcher<ActionData>();
   const shopify = useAppBridge();
+  const [isDone, setIsDone] = useState(false);
   const isSubmitting = fetcher.state !== "idle";
   const submittedIntent =
     fetcher.formData?.get("intent") as string | undefined;
@@ -583,6 +584,7 @@ function ReturnActions({ returnItem }: { returnItem: ReturnItem }) {
         const verb =
           fetcher.data.intent === "approve" ? "approved" : "declined";
         shopify.toast.show(`Return ${fetcher.data.returnName} ${verb}`);
+        setIsDone(true);
       } else {
         shopify.toast.show(fetcher.data.error ?? "Action failed", {
           isError: true,
@@ -591,7 +593,7 @@ function ReturnActions({ returnItem }: { returnItem: ReturnItem }) {
     }
   }, [fetcher.data, shopify]);
 
-  if (returnItem.status !== "REQUESTED") {
+  if (returnItem.status !== "REQUESTED" || isDone) {
     return null;
   }
 
