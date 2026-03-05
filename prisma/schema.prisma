@@ -7,7 +7,7 @@ generator client {
 
 // Note that some adapters may set a maximum length for the String type by default, please ensure your strings are long
 // enough when changing adapters.
-// See https://www.prisma.ly/d/prisma-schema-reference#string for more information
+// See https://www.prisma.io/docs/orm/reference/prisma-schema-reference#string for more information
 datasource db {
   provider = "sqlite"
   url      = "file:dev.sqlite"
@@ -98,4 +98,67 @@ model StatusHistory {
   changedAt       DateTime      @default(now())
 
   @@index([returnRequestId])
+}
+
+// ─── Return Rules ─────────────────────────────────────────────────────────────
+
+model ReturnRule {
+  id            String   @id @default(uuid())
+  shop          String
+  name          String
+  priority      Int      @default(0)
+  active        Boolean  @default(true)
+
+  // Conditions (null = match any)
+  productType   String?
+  returnReason  String?
+  orderValueMin Float?
+  orderValueMax Float?
+
+  // Actions
+  offerType     String   // "store_credit" | "exchange" | "refund"
+  bonusPercent  Float    @default(0)
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([shop, active])
+}
+
+// ─── Notifications ────────────────────────────────────────────────────────────
+
+model NotificationSetting {
+  id              String   @id @default(uuid())
+  shop            String   @unique
+
+  // Email
+  emailEnabled    Boolean  @default(false)
+  emailAddress    String?
+
+  // Slack
+  slackEnabled    Boolean  @default(false)
+  slackWebhookUrl String?
+
+  // Delivery mode: "immediate" | "digest"
+  deliveryMode    String   @default("immediate")
+  // For digest: cron hour (0-23) in UTC
+  digestHourUtc   Int      @default(9)
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model NotificationLog {
+  id          String   @id @default(uuid())
+  shop        String
+  channel     String   // "email" | "slack"
+  returnId    String
+  returnName  String
+  orderName   String
+  status      String   // "pending" | "sent" | "failed"
+  error       String?
+  sentAt      DateTime?
+  createdAt   DateTime @default(now())
+
+  @@index([shop, status])
 }
