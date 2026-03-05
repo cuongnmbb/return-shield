@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm run lint)",
+      "Bash(npm run build)",
+      "WebFetch(domain:shopify.dev)",
+      "Bash(git add app/routes/app._index.tsx app/routes/app.additional.tsx app/routes/app.tsx package-lock.json package.json shopify.app.toml docs/)",
+      "Bash(git commit:*)",
+      "Bash(git push origin main)"
+    ]
+  }
+}

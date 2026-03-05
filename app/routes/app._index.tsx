@@ -1,6 +1,10 @@
-import { useState, useCallback, useMemo } from "react";
-import type { LoaderFunctionArgs, HeadersFunction } from "react-router";
-import { useLoaderData, Link } from "react-router";
+import { useState, useCallback, useMemo, useEffect } from "react";
+import type {
+  ActionFunctionArgs,
+  LoaderFunctionArgs,
+  HeadersFunction,
+} from "react-router";
+import { useLoaderData, Link, useFetcher } from "react-router";
 import {
   Page,
   Layout,
@@ -14,8 +18,10 @@ import {
   useIndexResourceState,
   Tabs,
   Box,
+  Button,
 } from "@shopify/polaris";
 import type { TabProps } from "@shopify/polaris";
+import { useAppBridge } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 
@@ -39,6 +45,13 @@ interface ReturnItem {
 interface LoaderData {
   returns: ReturnItem[];
   counts: Record<string, number>;
+}
+
+interface ActionData {
+  success: boolean;
+  intent: string;
+  returnName?: string;
+  error?: string;
 }
 
 const RETURNS_QUERY = `#graphql
@@ -90,6 +103,38 @@ const RETURNS_QUERY = `#graphql
   }
 `;
 
+const RETURN_APPROVE_MUTATION = `#graphql
+  mutation ReturnApprove($id: ID!) {
+    returnApproveRequest(input: { id: $id }) {
+      return {
+        id
+        status
+        name
+      }
+      userErrors {
+        field
+        message
+      }
+    }
+  }
+`;
+
+const RETURN_DECLINE_MUTATION = `#graphql
+  mutation ReturnDecline($id: ID!) {
+    returnDeclineRequest(input: { id: $id, declineReason: OTHER }) {
+      return {
+        id
+        status
+        name
+      }
+      userErrors {
+        field
+        message
+      }
+    }
+  }
+`;
+
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin } = await authenticate.admin(request);
 
@@ -116,7 +161,13 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         orderName: order.name,
         orderId: order.id,
         returnLineItems: (ret.returnLineItems?.edges ?? []).map(
-          (li: { node: { quantity: number; returnReasonNote: string | null; fulfillmentLineItem?: { lineItem?: { title?: string } } } }) => ({
+          (li: {
+            node: {
+              quantity: number;
+              returnReasonNote: string | null;
+              fulfillmentLineItem?: { lineItem?: { title?: string } };
+            };
+          }) => ({
             quantity: li.node.quantity,
             returnReasonNote: li.node.returnReasonNote,
             productTitle:
@@ -127,9 +178,9 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     }
   }
 
-  // Sort returns by createdAt descending
   returns.sort(
-    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+    (a, b) =>
+      new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
   );
 
   const counts: Record<string, number> = {
@@ -146,9 +197,51 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   return { returns, counts } satisfies LoaderData;
 };
 
+export const action = async ({ request }: ActionFunctionArgs) => {
+  const { admin } = await authenticate.admin(request);
+  const formData = await request.formData();
+  const intent = formData.get("intent") as string;
+  const returnId = formData.get("returnId") as string;
+
+  if (!returnId || !intent) {
+    return { success: false, intent: intent ?? "", error: "Missing data" };
+  }
+
+  const mutation =
+    intent === "approve" ? RETURN_APPROVE_MUTATION : RETURN_DECLINE_MUTATION;
+
+  const response = await admin.graphql(mutation, {
+    variables: { id: returnId },
+  });
+  const json = await response.json();
+
+  const result =
+    intent === "approve"
+      ? json.data?.returnApproveRequest
+      : json.data?.returnDeclineRequest;
+
+  const userErrors = result?.userErrors ?? [];
+  if (userErrors.length > 0) {
+    return {
+      success: false,
+      intent,
+      error: userErrors.map((e: { message: string }) => e.message).join(", "),
+    } satisfies ActionData;
+  }
+
+  return {
+    success: true,
+    intent,
+    returnName: result?.return?.name ?? "",
+  } satisfies ActionData;
+};
+
 const STATUS_BADGE_MAP: Record<
   string,
-  { tone: "warning" | "info" | "success" | "critical" | undefined; label: string }
+  {
+    tone: "warning" | "info" | "success" | "critical" | undefined;
+    label: string;
+  }
 > = {
   REQUESTED: { tone: "warning", label: "Requested" },
   OPEN: { tone: "info", label: "Open" },
@@ -157,7 +250,14 @@ const STATUS_BADGE_MAP: Record<
   CANCELED: { tone: undefined, label: "Canceled" },
 };
 
-const STATUS_TABS = ["All", "Requested", "Open", "Closed", "Declined", "Canceled"];
+const STATUS_TABS = [
+  "All",
+  "Requested",
+  "Open",
+  "Closed",
+  "Declined",
+  "Canceled",
+];
 
 function formatRelativeDate(dateString: string): string {
   const date = new Date(dateString);
@@ -179,6 +279,65 @@ function extractReturnNumericId(gid: string): string {
   return parts[parts.length - 1];
 }
 
+function ReturnActions({ returnItem }: { returnItem: ReturnItem }) {
+  const fetcher = useFetcher<ActionData>();
+  const shopify = useAppBridge();
+  const isSubmitting = fetcher.state !== "idle";
+  const submittedIntent =
+    fetcher.formData?.get("intent") as string | undefined;
+
+  useEffect(() => {
+    if (fetcher.data) {
+      if (fetcher.data.success) {
+        const verb =
+          fetcher.data.intent === "approve" ? "approved" : "declined";
+        shopify.toast.show(
+          `Return ${fetcher.data.returnName} ${verb}`,
+        );
+      } else {
+        shopify.toast.show(fetcher.data.error ?? "Action failed", {
+          isError: true,
+        });
+      }
+    }
+  }, [fetcher.data, shopify]);
+
+  if (returnItem.status !== "REQUESTED") {
+    return null;
+  }
+
+  return (
+    <InlineStack gap="200">
+      <fetcher.Form method="post">
+        <input type="hidden" name="returnId" value={returnItem.id} />
+        <input type="hidden" name="intent" value="approve" />
+        <Button
+          size="micro"
+          variant="primary"
+          submit
+          loading={isSubmitting && submittedIntent === "approve"}
+          disabled={isSubmitting}
+        >
+          Approve
+        </Button>
+      </fetcher.Form>
+      <fetcher.Form method="post">
+        <input type="hidden" name="returnId" value={returnItem.id} />
+        <input type="hidden" name="intent" value="decline" />
+        <Button
+          size="micro"
+          tone="critical"
+          submit
+          loading={isSubmitting && submittedIntent === "decline"}
+          disabled={isSubmitting}
+        >
+          Decline
+        </Button>
+      </fetcher.Form>
+    </InlineStack>
+  );
+}
+
 export default function Dashboard() {
   const { returns, counts } = useLoaderData<LoaderData>();
   const [selectedTab, setSelectedTab] = useState(0);
@@ -195,7 +354,9 @@ export default function Dashboard() {
 
   const resourceName = { singular: "return", plural: "returns" };
   const { selectedResources, allResourcesSelected, handleSelectionChange } =
-    useIndexResourceState(filteredReturns, { resourceIDResolver: (r) => r.id });
+    useIndexResourceState(filteredReturns, {
+      resourceIDResolver: (r) => r.id,
+    });
 
   const tabs: TabProps[] = STATUS_TABS.map((label) => ({
     id: label.toLowerCase(),
@@ -214,7 +375,9 @@ export default function Dashboard() {
                 heading="No returns yet"
                 image="https://cdn.shopify.com/s/files/1/0262/4071/2726/files/emptystate-files.png"
               >
-                <p>When customers request returns, they&apos;ll appear here.</p>
+                <p>
+                  When customers request returns, they&apos;ll appear here.
+                </p>
               </EmptyState>
             </Card>
           </Layout.Section>
@@ -264,13 +427,17 @@ export default function Dashboard() {
         </IndexTable.Cell>
         <IndexTable.Cell>
           <Text variant="bodyMd" as="span">
-            {returnItem.totalQuantity} {returnItem.totalQuantity === 1 ? "item" : "items"}
+            {returnItem.totalQuantity}{" "}
+            {returnItem.totalQuantity === 1 ? "item" : "items"}
           </Text>
         </IndexTable.Cell>
         <IndexTable.Cell>
           <Text variant="bodyMd" as="span" tone="subdued">
             {formatRelativeDate(returnItem.createdAt)}
           </Text>
+        </IndexTable.Cell>
+        <IndexTable.Cell>
+          <ReturnActions returnItem={returnItem} />
         </IndexTable.Cell>
       </IndexTable.Row>
     );
@@ -314,6 +481,7 @@ export default function Dashboard() {
                 { title: "Status" },
                 { title: "Items" },
                 { title: "Date" },
+                { title: "Actions" },
               ]}
               selectable={false}
             >
