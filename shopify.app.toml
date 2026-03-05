@@ -23,5 +23,10 @@ api_version = "2026-04"
 [access_scopes]
 scopes = "read_customers,read_orders,read_products,read_returns,read_shipping,write_orders,write_returns"
 
+[app_proxy]
+url = "/portal"
+prefix = "apps"
+subpath = "returns"
+
 [auth]
 redirect_urls = [ "https://example.com/api/auth" ]
