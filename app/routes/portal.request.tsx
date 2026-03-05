@@ -24,6 +24,7 @@ import {
   Badge,
 } from "@shopify/polaris";
 import { unauthenticated } from "../shopify.server";
+import prisma from "../db.server";
 import {
   calculateStoreCreditOffer,
   createStoreCreditOffer,
@@ -176,7 +177,7 @@ const MOCK_ORDERS: Record<
   },
 };
 
-function getMockOrderData(orderId: string): Omit<LoaderData, "shop" | "photoPolicy"> | null {
+function getMockOrderData(orderId: string): Omit<LoaderData, "shop" | "photoPolicy" | "portalConfig"> | null {
   const mock = MOCK_ORDERS[orderId];
   if (!mock) return null;
   return {
