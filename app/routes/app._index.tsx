@@ -24,7 +24,7 @@ import {
   Box,
 } from "@shopify/polaris";
 import type { TabProps, BadgeProps } from "@shopify/polaris";
-import { CheckIcon, XIcon } from "@shopify/polaris-icons";
+import { CheckIcon, XIcon, ExternalIcon } from "@shopify/polaris-icons";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
 import { boundary } from "@shopify/shopify-app-react-router/server";
@@ -61,6 +61,7 @@ interface LoaderData {
   returns: ReturnItem[];
   counts: Record<string, number>;
   financials: FinancialSummary;
+  portalUrl: string;
 }
 
 interface ActionData {
@@ -281,7 +282,11 @@ function buildCounts(returns: ReturnItem[]): Record<string, number> {
 }
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { admin } = await authenticate.admin(request);
+  const { admin, session } = await authenticate.admin(request);
+
+  const shop = session.shop;
+  const appUrl = process.env.SHOPIFY_APP_URL || "";
+  const portalUrl = `${appUrl}/portal?shop=${encodeURIComponent(shop)}`;
 
   const response = await admin.graphql(RETURNS_QUERY, {
     variables: { first: 50 },
@@ -354,6 +359,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       returns: mockReturns,
       counts: buildCounts(mockReturns),
       financials: MOCK_FINANCIALS,
+      portalUrl,
     } satisfies LoaderData;
   }
 
@@ -373,7 +379,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     currencyCode,
   };
 
-  return { returns, counts: buildCounts(returns), financials } satisfies LoaderData;
+  return { returns, counts: buildCounts(returns), financials, portalUrl } satisfies LoaderData;
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
@@ -570,7 +576,7 @@ function ReturnActions({ returnItem }: { returnItem: ReturnItem }) {
 // ── Dashboard page ─────────────────────────────────────────────────────
 
 export default function Dashboard() {
-  const { returns, counts, financials } = useLoaderData<LoaderData>();
+  const { returns, counts, financials, portalUrl } = useLoaderData<LoaderData>();
   const [selectedTab, setSelectedTab] = useState(0);
 
   const handleTabChange = useCallback((index: number) => {
@@ -683,7 +689,17 @@ export default function Dashboard() {
   });
 
   return (
-    <Page title="Dashboard" subtitle="Return requests overview" fullWidth>
+    <Page
+      title="Dashboard"
+      subtitle="Return requests overview"
+      fullWidth
+      primaryAction={{
+        content: "Open return portal",
+        icon: ExternalIcon,
+        url: portalUrl,
+        external: true,
+      }}
+    >
       <Layout>
         <Layout.Section>
           <BlockStack gap="400">

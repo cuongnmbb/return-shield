@@ -410,8 +410,12 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     }
 
     // Mock acceptance in development
-    if (process.env.NODE_ENV !== "production" && offerId.startsWith("mock-")) {
-      await updateStoreCreditOfferStatus(offerId, "ACCEPTED");
+    if (process.env.NODE_ENV !== "production" && customerId.includes("mock")) {
+      try {
+        await updateStoreCreditOfferStatus(offerId, "ACCEPTED");
+      } catch (err) {
+        console.error("Failed to update mock offer status:", err);
+      }
       return {
         intent,
         offerAccepted: true,
@@ -502,7 +506,11 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   if (intent === "decline_credit") {
     const offerId = String(formData.get("offerId") || "");
     if (offerId) {
-      await updateStoreCreditOfferStatus(offerId, "DECLINED");
+      try {
+        await updateStoreCreditOfferStatus(offerId, "DECLINED");
+      } catch (err) {
+        console.error("Failed to update offer status:", err);
+      }
     }
     return { intent, success: true } satisfies ActionData;
   }
@@ -553,32 +561,36 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const returnId = "gid://shopify/Return/mock-new";
 
     // Calculate store credit offer
-    const offer = await calculateStoreCreditOffer(shop || "mock-shop", prices, currencyCode);
+    try {
+      const offer = await calculateStoreCreditOffer(shop || "mock-shop", prices, currencyCode);
 
-    if (offer.eligible) {
-      const dbOffer = await createStoreCreditOffer({
-        shop: shop || "mock-shop",
-        orderId,
-        orderName,
-        returnId,
-        customerId: customerId || undefined,
-        refundAmount: offer.refundAmount,
-        creditAmount: offer.creditAmount,
-        currencyCode: offer.currencyCode,
-      });
-
-      return {
-        intent,
-        success: true,
-        returnId,
-        offer: {
-          offerId: dbOffer.id,
+      if (offer.eligible) {
+        const dbOffer = await createStoreCreditOffer({
+          shop: shop || "mock-shop",
+          orderId,
+          orderName,
+          returnId,
+          customerId: customerId || undefined,
           refundAmount: offer.refundAmount,
           creditAmount: offer.creditAmount,
-          bonusPercentage: offer.bonusPercentage,
           currencyCode: offer.currencyCode,
-        },
-      } satisfies ActionData;
+        });
+
+        return {
+          intent,
+          success: true,
+          returnId,
+          offer: {
+            offerId: dbOffer.id,
+            refundAmount: offer.refundAmount,
+            creditAmount: offer.creditAmount,
+            bonusPercentage: offer.bonusPercentage,
+            currencyCode: offer.currencyCode,
+          },
+        } satisfies ActionData;
+      }
+    } catch (err) {
+      console.error("Store credit offer calculation failed:", err);
     }
 
     return { intent, success: true, returnId } satisfies ActionData;
@@ -632,33 +644,37 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
     const returnId = result.return.id;
 
-    // Calculate store credit offer
-    const offer = await calculateStoreCreditOffer(shop, prices, currencyCode);
+    // Calculate store credit offer (non-blocking — don't crash if it fails)
+    try {
+      const offer = await calculateStoreCreditOffer(shop, prices, currencyCode);
 
-    if (offer.eligible && customerId) {
-      const dbOffer = await createStoreCreditOffer({
-        shop,
-        orderId,
-        orderName,
-        returnId,
-        customerId,
-        refundAmount: offer.refundAmount,
-        creditAmount: offer.creditAmount,
-        currencyCode: offer.currencyCode,
-      });
-
-      return {
-        intent,
-        success: true,
-        returnId,
-        offer: {
-          offerId: dbOffer.id,
+      if (offer.eligible && customerId) {
+        const dbOffer = await createStoreCreditOffer({
+          shop,
+          orderId,
+          orderName,
+          returnId,
+          customerId,
           refundAmount: offer.refundAmount,
           creditAmount: offer.creditAmount,
-          bonusPercentage: offer.bonusPercentage,
           currencyCode: offer.currencyCode,
-        },
-      } satisfies ActionData;
+        });
+
+        return {
+          intent,
+          success: true,
+          returnId,
+          offer: {
+            offerId: dbOffer.id,
+            refundAmount: offer.refundAmount,
+            creditAmount: offer.creditAmount,
+            bonusPercentage: offer.bonusPercentage,
+            currencyCode: offer.currencyCode,
+          },
+        } satisfies ActionData;
+      }
+    } catch (err) {
+      console.error("Store credit offer calculation failed:", err);
     }
 
     return { intent, success: true, returnId } satisfies ActionData;
@@ -775,9 +791,17 @@ export default function PortalRequest() {
                   You can use this credit on your next purchase. Your return for
                   order {order.name} has been approved automatically.
                 </Text>
-                <Button url={`/portal?shop=${encodeURIComponent(shop)}`}>
-                  Return to portal
-                </Button>
+                <InlineStack gap="300">
+                  <Button url={`/portal?shop=${encodeURIComponent(shop)}`}>
+                    Return to portal
+                  </Button>
+                  <Button
+                    variant="primary"
+                    url="/app"
+                  >
+                    Continue shopping
+                  </Button>
+                </InlineStack>
               </BlockStack>
             </Card>
           </Layout.Section>
