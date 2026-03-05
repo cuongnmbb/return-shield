@@ -7,7 +7,7 @@ generator client {
 
 // Note that some adapters may set a maximum length for the String type by default, please ensure your strings are long
 // enough when changing adapters.
-// See https://www.prisma.io/docs/orm/reference/prisma-schema-reference#string for more information
+// See https://www.prisma.ly/d/prisma-schema-reference#string for more information
 datasource db {
   provider = "sqlite"
   url      = "file:dev.sqlite"
@@ -32,6 +32,8 @@ model Session {
   refreshToken        String?
   refreshTokenExpires DateTime?
 }
+
+// ─── Store Credit ─────────────────────────────────────────────────────────────
 
 model StoreCreditRule {
   id              String   @id @default(uuid())
@@ -60,4 +62,40 @@ model StoreCreditOffer {
 
   @@index([shop])
   @@index([returnId])
+}
+
+// ─── Return Status Tracking ───────────────────────────────────────────────────
+// ReturnStatus values (stored as String for SQLite compatibility):
+//   SUBMITTED | UNDER_REVIEW | APPROVED | REJECTED | COMPLETED
+
+model ReturnRequest {
+  id              String          @id @default(cuid())
+  shop            String
+  shopifyReturnId String?         @unique   // gid://shopify/Return/…
+  orderName       String
+  orderId         String
+  customerEmail   String
+  customerName    String          @default("")
+  reason          String          @default("")
+  status          String          @default("SUBMITTED")
+  notes           String          @default("")    // internal merchant notes
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  history         StatusHistory[]
+
+  @@index([shop])
+  @@index([status])
+  @@index([customerEmail])
+}
+
+model StatusHistory {
+  id              String        @id @default(cuid())
+  returnRequestId String
+  returnRequest   ReturnRequest @relation(fields: [returnRequestId], references: [id], onDelete: Cascade)
+  fromStatus      String?
+  toStatus        String
+  note            String        @default("")
+  changedAt       DateTime      @default(now())
+
+  @@index([returnRequestId])
 }
