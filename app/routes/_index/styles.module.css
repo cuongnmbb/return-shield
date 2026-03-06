@@ -1,73 +1,747 @@
-.index {
+/* ═══════════════════════════════════════════════
+   Base
+═══════════════════════════════════════════════ */
+.page {
+  min-height: 100vh;
+  background: #fff;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+  color: #111827;
+}
+
+/* ═══════════════════════════════════════════════
+   Nav
+═══════════════════════════════════════════════ */
+.nav {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+}
+.navInner {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 14px 24px;
+  display: flex;
   align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+.logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.logoIcon {
+  width: 36px;
+  height: 36px;
+  background: linear-gradient(135deg, #008060, #005c47);
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  color: #fff;
+  flex-shrink: 0;
+}
+.logoText {
+  font-size: 17px;
+  font-weight: 500;
+  color: #111827;
+  letter-spacing: -0.3px;
+}
+.logoBold {
+  font-weight: 800;
+  color: #008060;
+}
+.navRight {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+.navRating {
+  font-size: 13px;
+  font-weight: 600;
+  color: #d97706;
+}
+.navCta {
+  padding: 8px 20px;
+  background: #008060;
+  color: #fff;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: background 0.15s;
+}
+.navCta:hover {
+  background: #006a50;
+}
+
+/* ═══════════════════════════════════════════════
+   Hero
+═══════════════════════════════════════════════ */
+.hero {
+  position: relative;
+  overflow: hidden;
+  background: #f8fffe;
+  padding: 96px 24px 80px;
+  text-align: center;
+}
+.heroGlow {
+  position: absolute;
+  top: -120px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 800px;
+  height: 500px;
+  background: radial-gradient(ellipse, rgba(0, 128, 96, 0.12) 0%, transparent 70%);
+  pointer-events: none;
+}
+.heroInner {
+  position: relative;
+  max-width: 720px;
+  margin: 0 auto;
+}
+.heroPill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #059669;
+  background: #d1fae5;
+  border: 1px solid #a7f3d0;
+  border-radius: 100px;
+  padding: 5px 14px;
+  margin-bottom: 28px;
+}
+.heroPillDot {
+  width: 7px;
+  height: 7px;
+  background: #10b981;
+  border-radius: 50%;
+  animation: pulse 2s ease-in-out infinite;
+}
+@keyframes pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.6; transform: scale(0.8); }
+}
+.heroH1 {
+  font-size: 56px;
+  font-weight: 900;
+  line-height: 1.1;
+  letter-spacing: -2px;
+  color: #0a0a0a;
+  margin: 0 0 22px;
+}
+.heroStrike {
+  position: relative;
+  color: #dc2626;
+  display: inline-block;
+}
+.heroStrike::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 52%;
+  width: 100%;
+  height: 4px;
+  background: #dc2626;
+  border-radius: 2px;
+  transform: rotate(-3deg);
+}
+.heroAccent {
+  color: #008060;
+}
+.heroSub {
+  font-size: 18px;
+  line-height: 1.7;
+  color: #4b5563;
+  max-width: 560px;
+  margin: 0 auto 40px;
+}
+.heroStats {
   display: flex;
   justify-content: center;
-  height: 100%;
-  width: 100%;
+  gap: 0;
+  margin-bottom: 48px;
+  border: 1px solid #e5e7eb;
+  border-radius: 16px;
+  background: #fff;
+  overflow: hidden;
+  box-shadow: 0 2px 16px rgba(0,0,0,0.05);
+}
+.heroStat {
+  flex: 1;
+  padding: 20px 16px;
   text-align: center;
-  padding: 1rem;
+  border-right: 1px solid #e5e7eb;
+}
+.heroStat:last-child {
+  border-right: none;
+}
+.heroStatValue {
+  display: block;
+  font-size: 26px;
+  font-weight: 800;
+  color: #008060;
+  letter-spacing: -0.5px;
+  line-height: 1;
+  margin-bottom: 4px;
+}
+.heroStatLabel {
+  font-size: 12px;
+  color: #6b7280;
+  font-weight: 500;
+  line-height: 1.3;
 }
 
-.heading,
-.text {
-  padding: 0;
-  margin: 0;
+/* ── Install box ── */
+.installBox {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 20px;
+  padding: 32px;
+  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.08);
+  text-align: left;
+}
+.installEyebrow {
+  font-size: 13px;
+  font-weight: 700;
+  color: #059669;
+  text-align: center;
+  margin: 0 0 16px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+.installForm {
+  display: flex;
+  gap: 10px;
+}
+.installInput {
+  flex: 1;
+  padding: 14px 18px;
+  font-size: 15px;
+  border: 1.5px solid #e5e7eb;
+  border-radius: 12px;
+  outline: none;
+  font-family: inherit;
+  color: #111827;
+  background: #f9fafb;
+  min-width: 0;
+  transition: border-color 0.15s, background 0.15s;
+}
+.installInput:focus {
+  border-color: #008060;
+  background: #fff;
+  box-shadow: 0 0 0 3px rgba(0, 128, 96, 0.1);
+}
+.installBtn {
+  padding: 14px 28px;
+  background: linear-gradient(135deg, #008060, #005c47);
+  color: #fff;
+  border: none;
+  border-radius: 12px;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  font-family: inherit;
+  white-space: nowrap;
+  flex-shrink: 0;
+  box-shadow: 0 4px 14px rgba(0, 128, 96, 0.35);
+  transition: transform 0.1s, box-shadow 0.1s;
+}
+.installBtn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px rgba(0, 128, 96, 0.45);
+}
+.installBtn:active {
+  transform: translateY(0);
+}
+.installHint {
+  font-size: 12px;
+  color: #9ca3af;
+  text-align: center;
+  margin: 12px 0 0;
 }
 
-.text {
-  font-size: 1.2rem;
-  padding-bottom: 2rem;
+/* ═══════════════════════════════════════════════
+   Pain section
+═══════════════════════════════════════════════ */
+.pain {
+  padding: 80px 24px;
+  background: #fff;
 }
-
-.content {
-  display: grid;
-  gap: 2rem;
+.painInner {
+  max-width: 900px;
+  margin: 0 auto;
 }
-
-.form {
+.painCard {
+  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+  border-radius: 24px;
+  padding: 56px 48px;
+  text-align: center;
+  color: #fff;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.18);
+}
+.painEmoji {
+  font-size: 48px;
+  margin: 0 0 20px;
+  line-height: 1;
+}
+.painHeading {
+  font-size: 32px;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+  margin: 0 0 16px;
+  line-height: 1.2;
+}
+.painText {
+  font-size: 16px;
+  color: rgba(255, 255, 255, 0.7);
+  line-height: 1.7;
+  max-width: 580px;
+  margin: 0 auto 44px;
+}
+.painText strong {
+  color: #f97316;
+  font-weight: 700;
+}
+.painStats {
   display: flex;
   align-items: center;
-  justify-content: flex-start;
+  justify-content: center;
+  gap: 0;
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 16px;
+  overflow: hidden;
+}
+.painStat {
+  flex: 1;
+  padding: 24px 20px;
+}
+.painDivider {
+  width: 1px;
+  height: 60px;
+  background: rgba(255,255,255,0.1);
+  flex-shrink: 0;
+}
+.painStatVal {
+  display: block;
+  font-size: 30px;
+  font-weight: 900;
+  color: #34d399;
+  letter-spacing: -0.5px;
+  margin-bottom: 6px;
+}
+.painStatLbl {
+  font-size: 12px;
+  color: rgba(255,255,255,0.55);
+  line-height: 1.4;
+}
+
+/* ═══════════════════════════════════════════════
+   Shared section labels
+═══════════════════════════════════════════════ */
+.sectionEyebrow {
+  font-size: 12px;
+  font-weight: 700;
+  color: #008060;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin: 0 0 10px;
+  text-align: center;
+}
+.sectionHeading {
+  font-size: 36px;
+  font-weight: 800;
+  letter-spacing: -0.8px;
+  color: #0a0a0a;
+  margin: 0 0 52px;
+  text-align: center;
+}
+
+/* ═══════════════════════════════════════════════
+   Features
+═══════════════════════════════════════════════ */
+.features {
+  padding: 80px 24px;
+  background: #f9fafb;
+}
+.featuresInner {
+  max-width: 1080px;
   margin: 0 auto;
-  gap: 1rem;
 }
-
-.label {
+.featureCards {
   display: grid;
-  gap: 0.2rem;
-  max-width: 20rem;
-  text-align: left;
-  font-size: 1rem;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 24px;
 }
-
-.input {
-  padding: 0.4rem;
+.featureCard {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 20px;
+  padding: 32px 28px;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.04);
+  transition: box-shadow 0.2s, transform 0.2s;
 }
-
-.button {
-  padding: 0.4rem;
+.featureCard:hover {
+  box-shadow: 0 8px 30px rgba(0,0,0,0.09);
+  transform: translateY(-3px);
 }
-
-.list {
-  list-style: none;
-  padding: 0;
-  padding-top: 3rem;
-  margin: 0;
+.featureIcon {
+  width: 52px;
+  height: 52px;
+  border-radius: 14px;
   display: flex;
-  gap: 2rem;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  margin-bottom: 20px;
+}
+.featureTitle {
+  font-size: 18px;
+  font-weight: 700;
+  color: #0a0a0a;
+  margin: 0 0 10px;
+  letter-spacing: -0.3px;
+}
+.featureDesc {
+  font-size: 14px;
+  color: #6b7280;
+  line-height: 1.65;
+  margin: 0 0 20px;
+}
+.featureBullets {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.featureBullet {
+  font-size: 13px;
+  color: #374151;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  line-height: 1.4;
+}
+.bulletCheck {
+  color: #008060;
+  font-weight: 700;
+  flex-shrink: 0;
+  font-size: 14px;
 }
 
-.list > li {
-  max-width: 20rem;
-  text-align: left;
+/* ═══════════════════════════════════════════════
+   How it works
+═══════════════════════════════════════════════ */
+.how {
+  padding: 80px 24px;
+  background: #fff;
+}
+.howInner {
+  max-width: 900px;
+  margin: 0 auto;
+}
+.howSteps {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0;
+  position: relative;
+}
+.howStep {
+  text-align: center;
+  padding: 0 32px;
+  position: relative;
+}
+.howStepNum {
+  width: 52px;
+  height: 52px;
+  background: linear-gradient(135deg, #008060, #005c47);
+  color: #fff;
+  border-radius: 50%;
+  font-size: 16px;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 20px;
+  box-shadow: 0 4px 16px rgba(0, 128, 96, 0.35);
+}
+.howConnector {
+  position: absolute;
+  top: 26px;
+  right: -50%;
+  width: 100%;
+  height: 2px;
+  background: linear-gradient(90deg, #008060, rgba(0,128,96,0.2));
+  z-index: 0;
+}
+.howStepTitle {
+  font-size: 17px;
+  font-weight: 700;
+  color: #0a0a0a;
+  margin: 0 0 10px;
+}
+.howStepDesc {
+  font-size: 14px;
+  color: #6b7280;
+  line-height: 1.6;
+  margin: 0;
 }
 
-@media only screen and (max-width: 50rem) {
-  .list {
-    display: block;
+/* ═══════════════════════════════════════════════
+   Testimonial
+═══════════════════════════════════════════════ */
+.testimonial {
+  padding: 80px 24px;
+  background: #f9fafb;
+}
+.testimonialInner {
+  max-width: 700px;
+  margin: 0 auto;
+}
+.testimonialCard {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 24px;
+  padding: 48px 44px;
+  text-align: center;
+  box-shadow: 0 4px 24px rgba(0,0,0,0.06);
+}
+.testimonialStars {
+  font-size: 22px;
+  color: #f59e0b;
+  letter-spacing: 3px;
+  margin-bottom: 24px;
+}
+.testimonialQuote {
+  font-size: 22px;
+  font-weight: 600;
+  color: #111827;
+  line-height: 1.55;
+  margin: 0 0 32px;
+  font-style: italic;
+  letter-spacing: -0.3px;
+}
+.testimonialAuthor {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+}
+.testimonialAvatar {
+  width: 44px;
+  height: 44px;
+  background: linear-gradient(135deg, #008060, #005c47);
+  color: #fff;
+  border-radius: 50%;
+  font-size: 14px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.testimonialName {
+  font-size: 15px;
+  font-weight: 700;
+  color: #0a0a0a;
+}
+.testimonialRole {
+  font-size: 13px;
+  color: #9ca3af;
+  margin-top: 2px;
+}
+
+/* ═══════════════════════════════════════════════
+   Final CTA
+═══════════════════════════════════════════════ */
+.cta {
+  padding: 100px 24px;
+  background: linear-gradient(135deg, #008060 0%, #005c47 100%);
+  text-align: center;
+}
+.ctaInner {
+  max-width: 620px;
+  margin: 0 auto;
+}
+.ctaHeading {
+  font-size: 40px;
+  font-weight: 900;
+  color: #fff;
+  letter-spacing: -1px;
+  margin: 0 0 14px;
+}
+.ctaSub {
+  font-size: 17px;
+  color: rgba(255, 255, 255, 0.75);
+  margin: 0 0 40px;
+  line-height: 1.6;
+}
+.ctaForm {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.ctaInput {
+  flex: 1;
+  padding: 16px 18px;
+  font-size: 15px;
+  border: none;
+  border-radius: 12px;
+  outline: none;
+  font-family: inherit;
+  color: #111827;
+  background: #fff;
+  min-width: 0;
+  transition: box-shadow 0.15s;
+}
+.ctaInput:focus {
+  box-shadow: 0 0 0 3px rgba(255,255,255,0.3);
+}
+.ctaBtn {
+  padding: 16px 28px;
+  background: #fff;
+  color: #008060;
+  border: none;
+  border-radius: 12px;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  font-family: inherit;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: transform 0.1s;
+}
+.ctaBtn:hover {
+  transform: translateY(-1px);
+}
+.ctaHint {
+  font-size: 13px;
+  color: rgba(255,255,255,0.6);
+  margin: 0;
+}
+
+/* ═══════════════════════════════════════════════
+   Footer
+═══════════════════════════════════════════════ */
+.footer {
+  background: #0a0a0a;
+  padding: 28px 24px;
+}
+.footerInner {
+  max-width: 1080px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+.footerLogo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 700;
+  color: #fff;
+}
+.footerLogoIcon {
+  width: 28px;
+  height: 28px;
+  background: #008060;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+}
+.footerCopy {
+  font-size: 13px;
+  color: #4b5563;
+  margin: 0;
+}
+
+/* ═══════════════════════════════════════════════
+   Responsive
+═══════════════════════════════════════════════ */
+@media (max-width: 768px) {
+  .heroH1 {
+    font-size: 36px;
+    letter-spacing: -1px;
   }
-
-  .list > li {
-    padding-bottom: 1rem;
+  .heroSub {
+    font-size: 16px;
+  }
+  .heroStats {
+    flex-wrap: wrap;
+  }
+  .heroStat {
+    flex: 1 1 40%;
+    border-right: none;
+    border-bottom: 1px solid #e5e7eb;
+  }
+  .heroStat:last-child,
+  .heroStat:nth-last-child(2) {
+    border-bottom: none;
+  }
+  .installForm {
+    flex-direction: column;
+  }
+  .installBtn {
+    width: 100%;
+  }
+  .featureCards {
+    grid-template-columns: 1fr;
+  }
+  .howSteps {
+    grid-template-columns: 1fr;
+    gap: 40px;
+  }
+  .howConnector {
+    display: none;
+  }
+  .painCard {
+    padding: 36px 24px;
+  }
+  .painHeading {
+    font-size: 24px;
+  }
+  .painStats {
+    flex-direction: column;
+  }
+  .painDivider {
+    width: 100%;
+    height: 1px;
+  }
+  .sectionHeading {
+    font-size: 26px;
+  }
+  .ctaHeading {
+    font-size: 28px;
+  }
+  .ctaForm {
+    flex-direction: column;
+  }
+  .ctaBtn {
+    width: 100%;
+  }
+  .testimonialCard {
+    padding: 32px 24px;
+  }
+  .testimonialQuote {
+    font-size: 18px;
+  }
+  .footerInner {
+    flex-direction: column;
+    text-align: center;
+  }
+  .navRating {
+    display: none;
   }
 }

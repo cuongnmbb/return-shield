@@ -1,3 +1,4 @@
+import type { CSSProperties } from "react";
 import { useState, useCallback, useRef } from "react";
 import type { LoaderFunctionArgs, ActionFunctionArgs } from "react-router";
 import {
@@ -6,23 +7,6 @@ import {
   useNavigation,
   Form,
 } from "react-router";
-import {
-  Page,
-  Layout,
-  Card,
-  BlockStack,
-  InlineStack,
-  Text,
-  Button,
-  Banner,
-  Checkbox,
-  Select,
-  TextField,
-  Thumbnail,
-  Box,
-  Divider,
-  Badge,
-} from "@shopify/polaris";
 import { unauthenticated } from "../shopify.server";
 import prisma from "../db.server";
 import {
@@ -845,6 +829,160 @@ function formatCurrency(amount: number, currencyCode: string): string {
   }).format(amount);
 }
 
+// ── Shared styles ─────────────────────────────────────────────────────────────
+
+const S: Record<string, CSSProperties> = {
+  page: {
+    minHeight: "100vh",
+    background: "#f6f6f7",
+    fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+    color: "#202223",
+  },
+  navbar: {
+    background: "linear-gradient(135deg, #008060 0%, #005c47 100%)",
+  },
+  navbarInner: {
+    maxWidth: 580,
+    margin: "0 auto",
+    padding: "18px 20px",
+    display: "flex",
+    alignItems: "center",
+    gap: 14,
+  },
+  logoBox: {
+    width: 40,
+    height: 40,
+    background: "rgba(255,255,255,0.18)",
+    borderRadius: 10,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    fontSize: 18,
+    flexShrink: 0,
+  },
+  container: {
+    maxWidth: 580,
+    margin: "0 auto",
+    padding: "24px 16px 80px",
+  },
+  card: {
+    background: "#fff",
+    borderRadius: 14,
+    padding: "24px",
+    boxShadow: "0 2px 10px rgba(0,0,0,.06)",
+    marginBottom: 16,
+  },
+  label: {
+    display: "block",
+    fontSize: 13,
+    fontWeight: 600,
+    marginBottom: 5,
+    color: "#374151",
+  },
+  input: {
+    width: "100%",
+    padding: "9px 12px",
+    fontSize: 14,
+    border: "1.5px solid #e5e7eb",
+    borderRadius: 8,
+    outline: "none",
+    boxSizing: "border-box",
+    background: "#fff",
+    color: "#202223",
+    fontFamily: "inherit",
+  },
+  select: {
+    width: "100%",
+    padding: "9px 12px",
+    fontSize: 14,
+    border: "1.5px solid #e5e7eb",
+    borderRadius: 8,
+    background: "#fff",
+    color: "#202223",
+    fontFamily: "inherit",
+    cursor: "pointer",
+    outline: "none",
+  },
+  textarea: {
+    width: "100%",
+    padding: "9px 12px",
+    fontSize: 14,
+    border: "1.5px solid #e5e7eb",
+    borderRadius: 8,
+    outline: "none",
+    boxSizing: "border-box",
+    background: "#fff",
+    color: "#202223",
+    fontFamily: "inherit",
+    resize: "vertical" as const,
+  },
+  btn: {
+    padding: "12px 20px",
+    background: "#008060",
+    color: "#fff",
+    border: "none",
+    borderRadius: 9,
+    fontSize: 15,
+    fontWeight: 600,
+    cursor: "pointer",
+    fontFamily: "inherit",
+    letterSpacing: "0.2px",
+  },
+  btnGhost: {
+    padding: "11px 20px",
+    background: "#fff",
+    color: "#6b7280",
+    border: "1.5px solid #e5e7eb",
+    borderRadius: 9,
+    fontSize: 14,
+    cursor: "pointer",
+    fontFamily: "inherit",
+  },
+  errBox: {
+    background: "#fef2f2",
+    border: "1px solid #fecaca",
+    borderRadius: 9,
+    padding: "12px 16px",
+    color: "#dc2626",
+    fontSize: 14,
+    marginBottom: 14,
+    display: "flex",
+    gap: 8,
+  },
+  successBox: {
+    background: "#f0fdf4",
+    border: "1px solid #bbf7d0",
+    borderRadius: 9,
+    padding: "12px 16px",
+    color: "#166534",
+    fontSize: 14,
+    marginBottom: 14,
+  },
+  divider: {
+    height: 1,
+    background: "#f0f0f0",
+    margin: "16px 0",
+  },
+};
+
+function PortalHeader({ subtitle }: { subtitle?: string }) {
+  return (
+    <div style={S.navbar}>
+      <div style={S.navbarInner}>
+        <div style={S.logoBox}>↩</div>
+        <div>
+          <div style={{ color: "rgba(255,255,255,0.65)", fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.8px", marginBottom: 2 }}>
+            Return Request
+          </div>
+          <div style={{ color: "#fff", fontSize: 18, fontWeight: 700 }}>
+            {subtitle || "Request a Return"}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function PortalRequest() {
   const { order, lineItems, shop, photoPolicy, portalConfig, error: loaderError } =
     useLoaderData<typeof loader>() as LoaderData;
@@ -900,65 +1038,50 @@ export default function PortalRequest() {
     });
 
   const hasSelections = Object.values(selections).some((s) => s.selected);
+  const [dragOver, setDragOver] = useState(false);
 
   // ── Error state ────────────────────────────────────────────────────
   if (loaderError) {
     return (
-      <Page
-        title="Request a Return"
-        narrowWidth
-        backAction={{ url: `/portal?shop=${encodeURIComponent(shop)}` }}
-      >
-        <Layout>
-          <Layout.Section>
-            <Card>
-              <Banner tone="critical">
-                <Text as="p">{loaderError}</Text>
-              </Banner>
-            </Card>
-          </Layout.Section>
-        </Layout>
-      </Page>
+      <div style={S.page}>
+        <PortalHeader />
+        <div style={S.container}>
+          <div style={S.card}>
+            <div style={S.errBox}>
+              <span>⚠️</span>
+              <span>{loaderError}</span>
+            </div>
+            <a href={`/portal?shop=${encodeURIComponent(shop)}`} style={{ color: "#008060", textDecoration: "none", fontSize: 14, fontWeight: 600 }}>
+              ← Back to portal
+            </a>
+          </div>
+        </div>
+      </div>
     );
   }
 
   // ── Store credit accepted ──────────────────────────────────────────
   if (actionData?.offerAccepted) {
     return (
-      <Page title="Store Credit Issued" narrowWidth>
-        <Layout>
-          <Layout.Section>
-            <Card>
-              <BlockStack gap="400">
-                <Banner tone="success">
-                  <Text as="p">
-                    {formatCurrency(
-                      actionData.creditAmount || 0,
-                      actionData.currencyCode || "USD",
-                    )}{" "}
-                    store credit has been added to your account!
-                  </Text>
-                </Banner>
-                <Text as="p" tone="subdued">
-                  You can use this credit on your next purchase. Your return for
-                  order {order.name} has been approved automatically.
-                </Text>
-                <InlineStack gap="300">
-                  <Button url={`/portal?shop=${encodeURIComponent(shop)}`}>
-                    Return to portal
-                  </Button>
-                  <Button
-                    variant="primary"
-                    url="/app"
-                  >
-                    Continue shopping
-                  </Button>
-                </InlineStack>
-              </BlockStack>
-            </Card>
-          </Layout.Section>
-        </Layout>
-      </Page>
+      <div style={S.page}>
+        <PortalHeader subtitle={`Order ${order.name}`} />
+        <div style={S.container}>
+          <div style={{ ...S.card, textAlign: "center", padding: "48px 28px" }}>
+            <div style={{ fontSize: 52, marginBottom: 16 }}>🎉</div>
+            <h2 style={{ margin: "0 0 8px", fontSize: 22, fontWeight: 700 }}>Store credit issued!</h2>
+            <div style={{ fontSize: 36, fontWeight: 800, color: "#008060", margin: "16px 0" }}>
+              {formatCurrency(actionData.creditAmount || 0, actionData.currencyCode || "USD")}
+            </div>
+            <p style={{ color: "#6b7280", margin: "0 0 28px", fontSize: 14, lineHeight: 1.6 }}>
+              Added to your account. Your return for order <strong>{order.name}</strong> has been approved automatically.
+            </p>
+            <a href={`/portal?shop=${encodeURIComponent(shop)}`}
+              style={{ ...S.btn, display: "inline-block", textDecoration: "none" }}>
+              Back to portal
+            </a>
+          </div>
+        </div>
+      </div>
     );
   }
 
@@ -966,413 +1089,324 @@ export default function PortalRequest() {
   if (actionData?.success && actionData?.offer && portalConfig.storeCreditEnabled) {
     const { offer } = actionData;
     const bonusAmount = offer.creditAmount - offer.refundAmount;
-
     return (
-      <Page title="Store Credit Offer" narrowWidth>
-        <Layout>
-          <Layout.Section>
-            <Card>
-              <BlockStack gap="400">
-                <Banner tone="info">
-                  <Text as="p" fontWeight="semibold">
-                    You qualify for instant store credit!
-                  </Text>
-                </Banner>
+      <div style={S.page}>
+        <PortalHeader subtitle={`Order ${order.name}`} />
+        <div style={S.container}>
+          <div style={S.card}>
+            <div style={{ textAlign: "center", marginBottom: 24 }}>
+              <div style={{ fontSize: 40, marginBottom: 10 }}>💳</div>
+              <h2 style={{ margin: "0 0 6px", fontSize: 20, fontWeight: 700 }}>Get instant store credit!</h2>
+              <p style={{ color: "#6b7280", margin: 0, fontSize: 14 }}>
+                Skip the wait — get instant credit with a <strong style={{ color: "#008060" }}>{offer.bonusPercentage}% bonus</strong>.
+              </p>
+            </div>
 
-                <BlockStack gap="300">
-                  <Text as="p" variant="bodyLg">
-                    Instead of waiting for a refund, get instant store credit
-                    with a {offer.bonusPercentage}% bonus:
-                  </Text>
+            <div style={{ background: "#f0fdf4", border: "2px solid #86efac", borderRadius: 12, padding: "20px", marginBottom: 20 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+                <span style={{ color: "#6b7280", fontSize: 14 }}>Regular refund</span>
+                <span style={{ color: "#9ca3af", textDecoration: "line-through", fontSize: 14 }}>
+                  {formatCurrency(offer.refundAmount, offer.currencyCode)}
+                </span>
+              </div>
+              <div style={{ height: 1, background: "#bbf7d0", marginBottom: 10 }} />
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <span style={{ fontSize: 15, fontWeight: 700, color: "#008060" }}>Store credit</span>
+                  <span style={{ background: "#008060", color: "#fff", padding: "2px 8px", borderRadius: 12, fontSize: 12, fontWeight: 600 }}>+{offer.bonusPercentage}%</span>
+                </div>
+                <span style={{ fontSize: 26, fontWeight: 800, color: "#008060" }}>
+                  {formatCurrency(offer.creditAmount, offer.currencyCode)}
+                </span>
+              </div>
+              <p style={{ margin: "8px 0 0", fontSize: 12, color: "#16a34a" }}>
+                That&apos;s {formatCurrency(bonusAmount, offer.currencyCode)} extra value!
+              </p>
+            </div>
 
-                  <Card>
-                    <BlockStack gap="300">
-                      <InlineStack align="space-between">
-                        <Text as="span" tone="subdued">
-                          Regular refund
-                        </Text>
-                        <Text as="span" tone="subdued" textDecorationLine="line-through">
-                          {formatCurrency(offer.refundAmount, offer.currencyCode)}
-                        </Text>
-                      </InlineStack>
+            {actionData?.error && (
+              <div style={{ ...S.errBox, marginBottom: 16 }}>
+                <span>⚠️</span><span>{actionData.error}</span>
+              </div>
+            )}
 
-                      <Divider />
-
-                      <InlineStack align="space-between">
-                        <InlineStack gap="200" blockAlign="center">
-                          <Text as="span" fontWeight="bold" variant="headingMd">
-                            Store credit
-                          </Text>
-                          <Badge tone="success">
-                            +{offer.bonusPercentage}% bonus
-                          </Badge>
-                        </InlineStack>
-                        <Text
-                          as="span"
-                          fontWeight="bold"
-                          variant="headingMd"
-                          tone="success"
-                        >
-                          {formatCurrency(offer.creditAmount, offer.currencyCode)}
-                        </Text>
-                      </InlineStack>
-
-                      <InlineStack align="space-between">
-                        <Text as="span" variant="bodySm" tone="subdued">
-                          You save extra
-                        </Text>
-                        <Text as="span" variant="bodySm" tone="success">
-                          +{formatCurrency(bonusAmount, offer.currencyCode)}
-                        </Text>
-                      </InlineStack>
-                    </BlockStack>
-                  </Card>
-                </BlockStack>
-
-                {actionData?.error && (
-                  <Banner tone="critical">
-                    <Text as="p">{actionData.error}</Text>
-                  </Banner>
-                )}
-
-                <BlockStack gap="200">
-                  <Form method="post">
-                    <input type="hidden" name="intent" value="accept_credit" />
-                    <input type="hidden" name="shop" value={shop} />
-                    <input type="hidden" name="offerId" value={offer.offerId} />
-                    <input type="hidden" name="returnId" value={actionData.returnId || ""} />
-                    <input type="hidden" name="customerId" value={order.customerId || ""} />
-                    <input type="hidden" name="creditAmount" value={String(offer.creditAmount)} />
-                    <input type="hidden" name="currencyCode" value={offer.currencyCode} />
-                    <Button variant="primary" submit loading={isSubmitting} fullWidth>
-                      Accept {formatCurrency(offer.creditAmount, offer.currencyCode)} store credit
-                    </Button>
-                  </Form>
-                  <Form method="post">
-                    <input type="hidden" name="intent" value="decline_credit" />
-                    <input type="hidden" name="shop" value={shop} />
-                    <input type="hidden" name="offerId" value={offer.offerId} />
-                    <Button variant="plain" submit loading={isSubmitting} fullWidth>
-                      No thanks, continue with refund
-                    </Button>
-                  </Form>
-                </BlockStack>
-              </BlockStack>
-            </Card>
-          </Layout.Section>
-        </Layout>
-      </Page>
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              <Form method="post">
+                <input type="hidden" name="intent" value="accept_credit" />
+                <input type="hidden" name="shop" value={shop} />
+                <input type="hidden" name="offerId" value={offer.offerId} />
+                <input type="hidden" name="returnId" value={actionData.returnId || ""} />
+                <input type="hidden" name="customerId" value={order.customerId || ""} />
+                <input type="hidden" name="creditAmount" value={String(offer.creditAmount)} />
+                <input type="hidden" name="currencyCode" value={offer.currencyCode} />
+                <button type="submit" style={{ ...S.btn, width: "100%", opacity: isSubmitting ? 0.7 : 1 }} disabled={isSubmitting}>
+                  {isSubmitting ? "Processing…" : `Accept ${formatCurrency(offer.creditAmount, offer.currencyCode)} store credit`}
+                </button>
+              </Form>
+              <Form method="post">
+                <input type="hidden" name="intent" value="decline_credit" />
+                <input type="hidden" name="shop" value={shop} />
+                <input type="hidden" name="offerId" value={offer.offerId} />
+                <button type="submit" style={{ ...S.btnGhost, width: "100%", opacity: isSubmitting ? 0.7 : 1 }} disabled={isSubmitting}>
+                  No thanks, I&apos;ll wait for the refund
+                </button>
+              </Form>
+            </div>
+          </div>
+        </div>
+      </div>
     );
   }
 
-  // ── Return submitted (no offer or declined) ────────────────────────
-  if (actionData?.success && actionData?.intent !== "submit_return") {
-    // Declined credit — show normal success
+  // ── Return submitted (success state) ──────────────────────────────
+  if (actionData?.success) {
     return (
-      <Page title="Return Submitted" narrowWidth>
-        <Layout>
-          <Layout.Section>
-            <Card>
-              <BlockStack gap="400">
-                <Banner tone="success">
-                  <Text as="p">
-                    Your return request for order {order.name} has been submitted
-                    successfully. The store will review your request and get back to you.
-                  </Text>
-                </Banner>
-                <Button url={`/portal?shop=${encodeURIComponent(shop)}`}>
-                  Return to portal
-                </Button>
-              </BlockStack>
-            </Card>
-          </Layout.Section>
-        </Layout>
-      </Page>
-    );
-  }
-
-  if (actionData?.success && !actionData?.offer) {
-    // No offer available — show normal success
-    return (
-      <Page title="Return Submitted" narrowWidth>
-        <Layout>
-          <Layout.Section>
-            <Card>
-              <BlockStack gap="400">
-                <Banner tone="success">
-                  <Text as="p">
-                    Your return request for order {order.name} has been submitted
-                    successfully. The store will review your request and get back to you.
-                  </Text>
-                </Banner>
-                <Button url={`/portal?shop=${encodeURIComponent(shop)}`}>
-                  Return to portal
-                </Button>
-              </BlockStack>
-            </Card>
-          </Layout.Section>
-        </Layout>
-      </Page>
+      <div style={S.page}>
+        <PortalHeader subtitle={`Order ${order.name}`} />
+        <div style={S.container}>
+          <div style={{ ...S.card, textAlign: "center", padding: "48px 28px" }}>
+            <div style={{ fontSize: 52, marginBottom: 16 }}>✅</div>
+            <h2 style={{ margin: "0 0 8px", fontSize: 22, fontWeight: 700 }}>Return submitted!</h2>
+            <p style={{ color: "#6b7280", margin: "0 0 28px", fontSize: 14, lineHeight: 1.6 }}>
+              Your return request for order <strong>{order.name}</strong> has been received.<br />
+              We&apos;ll review it and get back to you soon.
+            </p>
+            <a href={`/portal?shop=${encodeURIComponent(shop)}`}
+              style={{ ...S.btn, display: "inline-block", textDecoration: "none" }}>
+              Back to portal
+            </a>
+          </div>
+        </div>
+      </div>
     );
   }
 
   // ── Item selection form ────────────────────────────────────────────
   return (
-    <Page
-      title="Request a Return"
-      narrowWidth
-      backAction={{ url: `/portal?shop=${encodeURIComponent(shop)}` }}
-    >
-      <Layout>
+    <div style={S.page}>
+      <PortalHeader subtitle={`Order ${order.name}`} />
+      <div style={S.container}>
+
+        {/* Order info */}
+        <div style={{ ...S.card, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <div>
+            <div style={{ fontWeight: 700, fontSize: 16 }}>Order {order.name}</div>
+            <div style={{ color: "#6b7280", fontSize: 13, marginTop: 3 }}>{order.email}</div>
+            {portalConfig.returnWindowDays > 0 && (
+              <div style={{ color: "#9ca3af", fontSize: 12, marginTop: 3 }}>
+                Returns accepted within {portalConfig.returnWindowDays} days
+              </div>
+            )}
+          </div>
+          <div style={{ textAlign: "right" }}>
+            <div style={{ fontSize: 12, color: "#9ca3af" }}>Placed</div>
+            <div style={{ fontSize: 13, color: "#374151", fontWeight: 500 }}>
+              {new Date(order.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+            </div>
+          </div>
+        </div>
+
+        {/* Welcome message */}
         {portalConfig.welcomeMessage && (
-          <Layout.Section>
-            <Banner tone="info">
-              <p>{portalConfig.welcomeMessage}</p>
-            </Banner>
-          </Layout.Section>
+          <div style={{ ...S.card, background: "#eff6ff", border: "1px solid #bfdbfe", color: "#1e40af" }}>
+            {portalConfig.welcomeMessage}
+          </div>
         )}
 
-        <Layout.Section>
-          <Card>
-            <BlockStack gap="200">
-              <Text as="h2" variant="headingMd">
-                Order {order.name}
-              </Text>
-              <Text as="p" tone="subdued">
-                {order.email} &middot;{" "}
-                {new Date(order.createdAt).toLocaleDateString()}
-              </Text>
-              {portalConfig.returnWindowDays > 0 && (
-                <Text as="p" variant="bodySm" tone="subdued">
-                  Returns accepted within {portalConfig.returnWindowDays} days of delivery
-                </Text>
-              )}
-            </BlockStack>
-          </Card>
-        </Layout.Section>
-
-        <Layout.Section>
-          <Card>
-            <BlockStack gap="400">
-              <Text as="h2" variant="headingMd">
-                Select items to return
-              </Text>
-
-              {lineItems.map((item, index) => {
-                const sel = selections[item.id];
-                const quantityOptions = Array.from(
-                  { length: item.quantity },
-                  (_, i) => ({
-                    label: String(i + 1),
-                    value: String(i + 1),
-                  }),
-                );
-
-                return (
-                  <BlockStack gap="300" key={item.id}>
-                    {index > 0 && <Divider />}
-                    <Checkbox
-                      label={
-                        <InlineStack gap="300" blockAlign="center" wrap={false}>
-                          {item.lineItem.image && (
-                            <Thumbnail
-                              source={item.lineItem.image.url}
-                              alt={item.lineItem.title}
-                              size="small"
-                            />
-                          )}
-                          <BlockStack gap="100">
-                            <Text as="span" variant="bodyMd" fontWeight="semibold">
-                              {item.lineItem.title}
-                            </Text>
-                            {item.lineItem.variant?.title &&
-                              item.lineItem.variant.title !== "Default Title" && (
-                                <Text as="span" variant="bodySm" tone="subdued">
-                                  {item.lineItem.variant.title}
-                                </Text>
-                              )}
-                            <Text as="span" variant="bodySm" tone="subdued">
-                              {formatCurrency(item.unitPrice, order.currencyCode)} &times; {item.quantity}
-                            </Text>
-                          </BlockStack>
-                        </InlineStack>
-                      }
-                      checked={sel.selected}
-                      onChange={(checked) =>
-                        updateSelection(item.id, { selected: checked })
-                      }
-                    />
-
-                    {sel.selected && (
-                      <Box paddingInlineStart="800">
-                        <BlockStack gap="300">
-                          <InlineStack gap="300" wrap>
-                            <Box minWidth="120px">
-                              <Select
-                                label="Quantity"
-                                options={quantityOptions}
-                                value={String(sel.quantity)}
-                                onChange={(val) =>
-                                  updateSelection(item.id, {
-                                    quantity: parseInt(val, 10),
-                                  })
-                                }
-                              />
-                            </Box>
-                            <Box minWidth="200px">
-                              <Select
-                                label="Return reason"
-                                options={RETURN_REASONS}
-                                value={sel.reason}
-                                onChange={(val) =>
-                                  updateSelection(item.id, { reason: val })
-                                }
-                              />
-                            </Box>
-                          </InlineStack>
-                          <TextField
-                            label="Note (optional)"
-                            value={sel.note}
-                            onChange={(val) =>
-                              updateSelection(item.id, { note: val })
-                            }
-                            placeholder="Tell us more about why you're returning this item"
-                            multiline={2}
-                            autoComplete="off"
-                          />
-                        </BlockStack>
-                      </Box>
-                    )}
-                  </BlockStack>
-                );
-              })}
-            </BlockStack>
-          </Card>
-        </Layout.Section>
-
-        <Layout.Section>
-          <Card>
-            <BlockStack gap="400">
-              <Text variant="headingSm" as="h2">
-                Upload photos {photoPolicy.required ? <Badge tone="attention">Required</Badge> : <Badge>Optional</Badge>}
-              </Text>
-              <Text as="p" variant="bodySm" tone="subdued">
-                Attach photos to help us assess your return.
-                Up to {photoPolicy.maxCount} photo{photoPolicy.maxCount > 1 ? "s" : ""}, max 5 MB each (JPEG, PNG, WebP, GIF).
-              </Text>
-
-              {photoError && (
-                <Banner tone="critical" onDismiss={() => setPhotoError(null)}>
-                  <Text as="p">{photoError}</Text>
-                </Banner>
-              )}
-
-              <Box
-                background="bg-surface-secondary"
-                borderRadius="200"
-                padding="400"
-              >
-                <BlockStack gap="300">
-                  <Button
-                    onClick={() => fileInputRef.current?.click()}
-                    disabled={isSubmitting}
-                  >
-                    {photoFiles.length > 0 ? `${photoFiles.length} photo${photoFiles.length > 1 ? "s" : ""} selected — change` : "Select photos"}
-                  </Button>
-
-                  {photoPreviews.length > 0 && (
-                    <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-                      {photoPreviews.map((url, i) => (
-                        <img
-                          key={i}
-                          src={url}
-                          alt={`Preview ${i + 1}`}
-                          style={{ width: 72, height: 72, objectFit: "cover", borderRadius: 8, border: "2px solid #008060" }}
-                        />
-                      ))}
-                    </div>
+        {/* Items */}
+        <div style={S.card}>
+          <h3 style={{ margin: "0 0 18px", fontSize: 16, fontWeight: 700 }}>Select items to return</h3>
+          {lineItems.map((item, index) => {
+            const sel = selections[item.id];
+            const quantities = Array.from({ length: item.quantity }, (_, i) => i + 1);
+            return (
+              <div key={item.id}>
+                {index > 0 && <div style={S.divider} />}
+                <label style={{ display: "flex", gap: 12, alignItems: "flex-start", cursor: "pointer" }}>
+                  <input
+                    type="checkbox"
+                    checked={sel.selected}
+                    onChange={(e) => updateSelection(item.id, { selected: e.target.checked })}
+                    style={{ marginTop: 3, width: 18, height: 18, accentColor: "#008060", flexShrink: 0, cursor: "pointer" }}
+                  />
+                  {item.lineItem.image && (
+                    <img src={item.lineItem.image.url} alt={item.lineItem.title}
+                      style={{ width: 56, height: 56, objectFit: "cover", borderRadius: 8, border: "1px solid #e5e7eb", flexShrink: 0 }} />
                   )}
-                </BlockStack>
-              </Box>
-            </BlockStack>
-          </Card>
-        </Layout.Section>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 2 }}>{item.lineItem.title}</div>
+                    {item.lineItem.variant?.title && item.lineItem.variant.title !== "Default Title" && (
+                      <div style={{ color: "#6b7280", fontSize: 12, marginBottom: 2 }}>{item.lineItem.variant.title}</div>
+                    )}
+                    <div style={{ color: "#374151", fontSize: 13 }}>
+                      {formatCurrency(item.unitPrice, order.currencyCode)} × {item.quantity}
+                    </div>
+                  </div>
+                </label>
 
-        <Layout.Section>
-          <Card>
-            <BlockStack gap="400">
-              {actionData?.error && actionData?.intent === "submit_return" && (
-                <Banner tone="critical">
-                  <Text as="p">{actionData.error}</Text>
-                </Banner>
-              )}
+                {sel.selected && (
+                  <div style={{ marginTop: 14, marginLeft: 30, display: "flex", flexDirection: "column", gap: 12 }}>
+                    <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+                      <div style={{ flex: "0 0 80px" }}>
+                        <label style={S.label}>Qty</label>
+                        <select style={S.select} value={sel.quantity}
+                          onChange={(e) => updateSelection(item.id, { quantity: parseInt(e.target.value, 10) })}>
+                          {quantities.map((q) => <option key={q} value={q}>{q}</option>)}
+                        </select>
+                      </div>
+                      <div style={{ flex: 1, minWidth: 160 }}>
+                        <label style={S.label}>
+                          Return reason {portalConfig.requireReason && <span style={{ color: "#dc2626" }}>*</span>}
+                        </label>
+                        <select style={S.select} value={sel.reason}
+                          onChange={(e) => updateSelection(item.id, { reason: e.target.value })}>
+                          {RETURN_REASONS.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
+                        </select>
+                      </div>
+                    </div>
+                    <div>
+                      <label style={S.label}>Note (optional)</label>
+                      <textarea rows={2} style={S.textarea} value={sel.note} placeholder="Tell us more…"
+                        onChange={(e) => updateSelection(item.id, { note: e.target.value })} />
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
 
-              {hasSelections && (
-                <Text as="p" tone="subdued">
-                  {selectedItems.length} item{selectedItems.length !== 1 ? "s" : ""}{" "}
-                  selected for return
-                </Text>
-              )}
+        {/* Photo upload */}
+        <div style={S.card}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+            <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700 }}>Photos</h3>
+            <span style={{
+              padding: "3px 10px", borderRadius: 12, fontSize: 12, fontWeight: 600,
+              background: photoPolicy.required ? "#fff4e5" : "#f3f4f6",
+              color: photoPolicy.required ? "#b25700" : "#6b7280",
+            }}>
+              {photoPolicy.required ? "Required" : "Optional"}
+            </span>
+          </div>
+          <p style={{ color: "#6b7280", fontSize: 13, margin: "0 0 14px" }}>
+            Up to {photoPolicy.maxCount} photo{photoPolicy.maxCount > 1 ? "s" : ""} · max 5 MB each · JPEG, PNG, WebP
+          </p>
 
-              <Form
-                method="post"
-                encType="multipart/form-data"
-                onSubmit={(e) => {
-                  if (photoPolicy.required && photoFiles.length === 0) {
-                    e.preventDefault();
-                    setPhotoError("Please upload at least one photo before submitting.");
-                    return;
-                  }
-                  // Sync selected files into the hidden file input that lives inside the form
-                  if (fileInputRef.current && photoFiles.length > 0) {
-                    const dt = new DataTransfer();
-                    photoFiles.forEach(f => dt.items.add(f));
-                    fileInputRef.current.files = dt.files;
-                  }
-                }}
-              >
-                <input type="hidden" name="intent" value="submit_return" />
-                <input type="hidden" name="shop" value={shop} />
-                <input type="hidden" name="orderId" value={order.id} />
-                <input type="hidden" name="orderName" value={order.name} />
-                <input type="hidden" name="customerEmail" value={order.email || ""} />
-                <input type="hidden" name="customerId" value={order.customerId || ""} />
-                <input type="hidden" name="currencyCode" value={order.currencyCode} />
-                <input type="hidden" name="items" value={JSON.stringify(selectedItems)} />
-                <input type="hidden" name="prices" value={JSON.stringify(selectedPrices)} />
-                {/* File input — triggered by "Select photos" button above */}
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  name="photos"
-                  multiple
-                  accept="image/jpeg,image/png,image/webp,image/gif"
-                  style={{ display: "none" }}
-                  onChange={(e) => {
-                    const files = Array.from(e.target.files ?? []);
-                    const valid = files.filter(f => f.size <= 5 * 1024 * 1024).slice(0, photoPolicy.maxCount);
-                    if (valid.length < files.length) {
-                      setPhotoError(`Some files were removed (exceeds 5 MB or max ${photoPolicy.maxCount} photos).`);
-                    } else {
-                      setPhotoError(null);
-                    }
-                    setPhotoFiles(valid);
-                    setPhotoPreviews(valid.map(f => URL.createObjectURL(f)));
-                  }}
-                />
-                <Button
-                  variant="primary"
-                  submit
-                  loading={isSubmitting}
-                  disabled={selectedItems.length === 0}
-                >
-                  Submit return request
-                </Button>
-              </Form>
-            </BlockStack>
-          </Card>
-        </Layout.Section>
-      </Layout>
-    </Page>
+          {photoError && (
+            <div style={{ ...S.errBox, marginBottom: 12 }}>
+              <span>⚠️</span><span>{photoError}</span>
+            </div>
+          )}
+
+          <div
+            onClick={() => fileInputRef.current?.click()}
+            onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+            onDragLeave={() => setDragOver(false)}
+            onDrop={(e) => {
+              e.preventDefault();
+              setDragOver(false);
+              const files = Array.from(e.dataTransfer.files)
+                .filter(f => f.type.startsWith("image/"))
+                .slice(0, photoPolicy.maxCount);
+              setPhotoFiles(files);
+              setPhotoPreviews(files.map(f => URL.createObjectURL(f)));
+            }}
+            style={{
+              border: `2px dashed ${dragOver ? "#008060" : "#d1d5db"}`,
+              borderRadius: 10, padding: "20px", textAlign: "center",
+              cursor: "pointer", background: dragOver ? "#f0fdf4" : "#fafafa",
+              transition: "all .15s",
+            }}
+          >
+            <div style={{ fontSize: 24, marginBottom: 6 }}>📷</div>
+            <div style={{ fontSize: 14, fontWeight: 600, color: "#374151" }}>Click to select or drag & drop</div>
+            <div style={{ fontSize: 12, color: "#9ca3af", marginTop: 4 }}>
+              Up to {photoPolicy.maxCount} file{photoPolicy.maxCount > 1 ? "s" : ""}
+            </div>
+          </div>
+
+          {photoPreviews.length > 0 && (
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 12 }}>
+              {photoPreviews.map((url, i) => (
+                <img key={i} src={url} alt={`Preview ${i + 1}`}
+                  style={{ width: 64, height: 64, objectFit: "cover", borderRadius: 8, border: "2px solid #008060" }} />
+              ))}
+              <div style={{ color: "#6b7280", fontSize: 12, alignSelf: "center", marginLeft: 4 }}>
+                {photoPreviews.length} selected
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Submit */}
+        <div style={S.card}>
+          {actionData?.error && actionData?.intent === "submit_return" && (
+            <div style={{ ...S.errBox, marginBottom: 14 }}>
+              <span>⚠️</span><span>{actionData.error}</span>
+            </div>
+          )}
+
+          {hasSelections && (
+            <p style={{ color: "#6b7280", fontSize: 13, margin: "0 0 14px" }}>
+              {selectedItems.length} item{selectedItems.length !== 1 ? "s" : ""} selected for return
+            </p>
+          )}
+
+          <Form
+            method="post"
+            encType="multipart/form-data"
+            onSubmit={(e) => {
+              if (photoPolicy.required && photoFiles.length === 0) {
+                e.preventDefault();
+                setPhotoError("Please upload at least one photo before submitting.");
+                return;
+              }
+              if (fileInputRef.current && photoFiles.length > 0) {
+                const dt = new DataTransfer();
+                photoFiles.forEach(f => dt.items.add(f));
+                fileInputRef.current.files = dt.files;
+              }
+            }}
+          >
+            <input type="hidden" name="intent" value="submit_return" />
+            <input type="hidden" name="shop" value={shop} />
+            <input type="hidden" name="orderId" value={order.id} />
+            <input type="hidden" name="orderName" value={order.name} />
+            <input type="hidden" name="customerEmail" value={order.email || ""} />
+            <input type="hidden" name="customerId" value={order.customerId || ""} />
+            <input type="hidden" name="currencyCode" value={order.currencyCode} />
+            <input type="hidden" name="items" value={JSON.stringify(selectedItems)} />
+            <input type="hidden" name="prices" value={JSON.stringify(selectedPrices)} />
+            <input
+              ref={fileInputRef}
+              type="file"
+              name="photos"
+              multiple
+              accept="image/jpeg,image/png,image/webp,image/gif"
+              style={{ display: "none" }}
+              onChange={(e) => {
+                const files = Array.from(e.target.files ?? []);
+                const valid = files.filter(f => f.size <= 5 * 1024 * 1024).slice(0, photoPolicy.maxCount);
+                if (valid.length < files.length) {
+                  setPhotoError(`Some files removed — max 5 MB each, up to ${photoPolicy.maxCount} photos.`);
+                } else {
+                  setPhotoError(null);
+                }
+                setPhotoFiles(valid);
+                setPhotoPreviews(valid.map(f => URL.createObjectURL(f)));
+              }}
+            />
+            <button
+              type="submit"
+              style={{ ...S.btn, width: "100%", opacity: (isSubmitting || selectedItems.length === 0) ? 0.55 : 1 }}
+              disabled={isSubmitting || selectedItems.length === 0}
+            >
+              {isSubmitting ? "Submitting…" : "Submit return request"}
+            </button>
+          </Form>
+        </div>
+
+      </div>
+    </div>
   );
 }

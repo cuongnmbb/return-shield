@@ -542,31 +542,37 @@ function itemsSummary(lineItems: ReturnLineItem[]): string {
 
 // ── Components ─────────────────────────────────────────────────────────
 
+const STAT_COLORS: Record<string, { bg: string; bar: string; text: string }> = {
+  Requested: { bg: "#fffbeb", bar: "#f59e0b", text: "#92400e" },
+  Open:      { bg: "#eff6ff", bar: "#3b82f6", text: "#1e40af" },
+  Closed:    { bg: "#f0fdf4", bar: "#22c55e", text: "#166534" },
+  Declined:  { bg: "#fef2f2", bar: "#ef4444", text: "#991b1b" },
+};
+
 function SummaryCard({
   label,
   count,
-  tone,
 }: {
   label: string;
   count: number;
   tone: BadgeProps["tone"];
 }) {
+  const colors = STAT_COLORS[label] ?? { bg: "#f9fafb", bar: "#6b7280", text: "#374151" };
   return (
-    <Card>
-      <BlockStack gap="200">
-        <Text variant="bodySm" as="p" tone="subdued">
-          {label}
-        </Text>
-        <InlineStack align="space-between" blockAlign="end">
-          <Text variant="heading2xl" as="p" fontWeight="bold" numeric>
-            {count}
-          </Text>
-          <Badge tone={tone} size="small">
-            {label}
-          </Badge>
-        </InlineStack>
-      </BlockStack>
-    </Card>
+    <div style={{
+      background: colors.bg,
+      borderRadius: 12,
+      padding: "18px 20px",
+      borderLeft: `4px solid ${colors.bar}`,
+      boxShadow: "0 1px 4px rgba(0,0,0,.05)",
+    }}>
+      <div style={{ fontSize: 13, color: colors.text, fontWeight: 600, marginBottom: 8, opacity: 0.85 }}>
+        {label}
+      </div>
+      <div style={{ fontSize: 32, fontWeight: 800, color: colors.text, lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>
+        {count}
+      </div>
+    </div>
   );
 }
 
@@ -784,41 +790,35 @@ export default function Dashboard() {
 
             {/* Financial summary */}
             <Card>
-              <BlockStack gap="300">
-                <Text variant="headingSm" as="h2">
-                  This month&apos;s financials
-                </Text>
+              <BlockStack gap="400">
+                <InlineStack align="space-between" blockAlign="center">
+                  <Text variant="headingSm" as="h2">This month&apos;s financials</Text>
+                  {financials.deflectionRate > 0 && (
+                    <Badge tone="success">
+                      {`${financials.deflectionRate}% deflected to store credit`}
+                    </Badge>
+                  )}
+                </InlineStack>
                 <InlineGrid columns={{ xs: 1, sm: 3 }} gap="400">
                   <BlockStack gap="100">
-                    <Text variant="bodySm" as="p" tone="subdued">
-                      Total refunded
-                    </Text>
-                    <Text variant="heading2xl" as="p" numeric>
+                    <Text variant="bodySm" as="p" tone="subdued">Total refunded</Text>
+                    <Text variant="headingXl" as="p" numeric fontWeight="bold">
                       {formatCurrency(financials.totalRefunded, financials.currencyCode)}
                     </Text>
                   </BlockStack>
                   <BlockStack gap="100">
-                    <Text variant="bodySm" as="p" tone="subdued">
-                      Store credit issued
-                    </Text>
-                    <Text variant="heading2xl" as="p" numeric tone="success">
+                    <Text variant="bodySm" as="p" tone="subdued">Store credit issued</Text>
+                    <Text variant="headingXl" as="p" numeric fontWeight="bold" tone="success">
                       {formatCurrency(financials.storeCreditAmount, financials.currencyCode)}
                     </Text>
-                    {financials.deflectionRate > 0 && (
-                      <InlineStack>
-                        <Badge tone="success" size="small">
-                          {`${financials.deflectionRate}% deflected`}
-                        </Badge>
-                      </InlineStack>
-                    )}
+                    <Text variant="bodySm" as="p" tone="subdued">Kept as store credit</Text>
                   </BlockStack>
                   <BlockStack gap="100">
-                    <Text variant="bodySm" as="p" tone="subdued">
-                      Refunded to customer
-                    </Text>
-                    <Text variant="heading2xl" as="p" numeric>
+                    <Text variant="bodySm" as="p" tone="subdued">Cash refunded</Text>
+                    <Text variant="headingXl" as="p" numeric fontWeight="bold">
                       {formatCurrency(financials.originalPaymentAmount, financials.currencyCode)}
                     </Text>
+                    <Text variant="bodySm" as="p" tone="subdued">Returned to payment method</Text>
                   </BlockStack>
                 </InlineGrid>
               </BlockStack>
@@ -869,7 +869,7 @@ export default function Dashboard() {
                     { title: "Return" },
                     { title: "Order" },
                     { title: "Status" },
-                    { title: "Items", alignment: "end" },
+                    { title: "Items" },
                     { title: "Date" },
                     { title: "Actions" },
                   ]}

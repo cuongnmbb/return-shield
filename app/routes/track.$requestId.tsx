@@ -212,44 +212,49 @@ function formatBytes(bytes: number) {
 const s = {
   page: {
     minHeight: "100vh",
-    background: "#f6f6f6",
-    fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
-    color: "#333",
+    background: "#f6f6f7",
+    fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+    color: "#202223",
+  } as React.CSSProperties,
+
+  navbar: {
+    background: "linear-gradient(135deg, #008060 0%, #005c47 100%)",
+  } as React.CSSProperties,
+
+  navbarInner: {
+    maxWidth: 620,
+    margin: "0 auto",
+    padding: "18px 20px",
+    display: "flex",
+    alignItems: "center",
+    gap: 14,
   } as React.CSSProperties,
 
   container: {
-    maxWidth: 640,
+    maxWidth: 620,
     margin: "0 auto",
-    padding: "40px 16px 80px",
-  } as React.CSSProperties,
-
-  header: {
-    background: "#008060",
-    borderRadius: 12,
-    padding: "28px 32px",
-    marginBottom: 24,
-    color: "#fff",
+    padding: "24px 16px 80px",
   } as React.CSSProperties,
 
   card: {
     background: "#fff",
-    borderRadius: 12,
-    boxShadow: "0 2px 8px rgba(0,0,0,.08)",
-    padding: "28px 32px",
-    marginBottom: 20,
+    borderRadius: 14,
+    boxShadow: "0 2px 10px rgba(0,0,0,.06)",
+    padding: "24px",
+    marginBottom: 16,
   } as React.CSSProperties,
 
   stepRow: {
     display: "flex",
     alignItems: "flex-start",
     gap: 16,
-    padding: "16px 0",
-    borderBottom: "1px solid #f0f0f0",
+    padding: "14px 0",
+    borderBottom: "1px solid #f3f4f6",
   } as React.CSSProperties,
 
   stepCircle: (state: StepStatus, isRejected: boolean) => ({
-    width: 36,
-    height: 36,
+    width: 38,
+    height: 38,
     borderRadius: "50%",
     flexShrink: 0,
     display: "flex",
@@ -258,24 +263,25 @@ const s = {
     fontSize: 16,
     background:
       state === "completed" ? "#008060"
-      : state === "current" ? (isRejected ? "#C0372F" : "#008060")
-      : "#e5e5e5",
-    color: state === "upcoming" ? "#aaa" : "#fff",
+      : state === "current" ? (isRejected ? "#dc2626" : "#008060")
+      : "#f3f4f6",
+    color: state === "upcoming" ? "#9ca3af" : "#fff",
     fontWeight: 700,
+    boxShadow: state !== "upcoming" ? "0 2px 6px rgba(0,0,0,.12)" : "none",
   }) as React.CSSProperties,
 
   stepLabel: (state: StepStatus) => ({
     fontWeight: state === "upcoming" ? 400 : 600,
-    color: state === "upcoming" ? "#999" : "#333",
+    color: state === "upcoming" ? "#9ca3af" : "#202223",
     marginBottom: 4,
     fontSize: 15,
   }) as React.CSSProperties,
 
   historyRow: {
     display: "flex",
-    gap: 12,
+    gap: 14,
     padding: "12px 0",
-    borderBottom: "1px solid #f7f7f7",
+    borderBottom: "1px solid #f3f4f6",
     alignItems: "flex-start",
   } as React.CSSProperties,
 };
@@ -481,11 +487,17 @@ export default function TrackPage() {
   if (!data.found) {
     return (
       <div style={s.page}>
+        <div style={s.navbar}>
+          <div style={s.navbarInner}>
+            <div style={{ width: 40, height: 40, background: "rgba(255,255,255,0.18)", borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, flexShrink: 0 }}>↩</div>
+            <div style={{ color: "#fff", fontSize: 18, fontWeight: 700 }}>Return Status</div>
+          </div>
+        </div>
         <div style={s.container}>
-          <div style={{ ...s.card, textAlign: "center", padding: "60px 32px" }}>
+          <div style={{ ...s.card, textAlign: "center", padding: "56px 32px" }}>
             <div style={{ fontSize: 48, marginBottom: 16 }}>🔎</div>
-            <h2 style={{ margin: "0 0 8px" }}>Return request not found</h2>
-            <p style={{ color: "#666", margin: 0 }}>
+            <h2 style={{ margin: "0 0 8px", fontSize: 20, fontWeight: 700 }}>Return request not found</h2>
+            <p style={{ color: "#6b7280", margin: 0, fontSize: 14 }}>
               Please check your tracking link and try again.
             </p>
           </div>
@@ -501,29 +513,41 @@ export default function TrackPage() {
 
   return (
     <div style={s.page}>
-      <div style={s.container}>
-        {/* Header */}
-        <div style={s.header}>
-          <p style={{ margin: "0 0 4px", opacity: 0.8, fontSize: 13 }}>Return Request</p>
-          <h1 style={{ margin: "0 0 8px", fontSize: 24 }}>Order {data.orderName}</h1>
-          {data.customerName && (
-            <p style={{ margin: 0, opacity: 0.85, fontSize: 14 }}>Hi, {data.customerName}</p>
-          )}
+      {/* Navbar */}
+      <div style={s.navbar}>
+        <div style={s.navbarInner}>
+          <div style={{ width: 40, height: 40, background: "rgba(255,255,255,0.18)", borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, flexShrink: 0 }}>↩</div>
+          <div>
+            <div style={{ color: "rgba(255,255,255,0.65)", fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.8px", marginBottom: 2 }}>
+              Return Status
+            </div>
+            <div style={{ color: "#fff", fontSize: 18, fontWeight: 700 }}>Order {data.orderName}</div>
+          </div>
         </div>
+      </div>
 
+      <div style={s.container}>
         {/* Current status */}
         <div style={s.card}>
-          <p style={{ margin: "0 0 8px", fontSize: 13, color: "#777" }}>Current Status</p>
-          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            <span style={{ display: "inline-block", padding: "6px 16px", borderRadius: 20, fontWeight: 600, fontSize: 15, background: badge.bg, color: badge.color }}>
-              {badge.label}
-            </span>
-            <span style={{ color: "#888", fontSize: 13 }}>
-              Last updated {formatDate(data.updatedAt)}
-            </span>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 10 }}>
+            <div>
+              <p style={{ margin: "0 0 8px", fontSize: 12, color: "#9ca3af", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.5px" }}>Current Status</p>
+              <span style={{ display: "inline-block", padding: "6px 18px", borderRadius: 20, fontWeight: 700, fontSize: 15, background: badge.bg, color: badge.color }}>
+                {badge.label}
+              </span>
+            </div>
+            <div style={{ textAlign: "right" }}>
+              <p style={{ margin: "0 0 4px", fontSize: 12, color: "#9ca3af" }}>Last updated</p>
+              <p style={{ margin: 0, fontSize: 13, color: "#374151" }}>{formatDate(data.updatedAt)}</p>
+            </div>
           </div>
+          {data.customerName && (
+            <p style={{ margin: "14px 0 0", fontSize: 14, color: "#6b7280" }}>
+              Hi, <strong style={{ color: "#202223" }}>{data.customerName}</strong>
+            </p>
+          )}
           {data.reason && (
-            <p style={{ marginTop: 12, color: "#555", fontSize: 14 }}>
+            <p style={{ marginTop: 12, color: "#374151", fontSize: 14, background: "#f9fafb", borderRadius: 8, padding: "10px 14px" }}>
               <strong>Reason:</strong> {data.reason}
             </p>
           )}
@@ -531,9 +555,9 @@ export default function TrackPage() {
 
         {/* Progress stepper */}
         <div style={s.card}>
-          <h3 style={{ margin: "0 0 4px", fontSize: 16 }}>Progress</h3>
-          <p style={{ margin: "0 0 20px", color: "#777", fontSize: 13 }}>
-            Here's where your return stands
+          <h3 style={{ margin: "0 0 4px", fontSize: 16, fontWeight: 700 }}>Progress</h3>
+          <p style={{ margin: "0 0 20px", color: "#6b7280", fontSize: 13 }}>
+            Here&apos;s where your return stands
           </p>
           {STEPS.map((step, idx) => {
             const state = stepState(idx, currentStepIndex);
@@ -562,7 +586,7 @@ export default function TrackPage() {
                   )}
                 </div>
                 {state === "current" && (
-                  <span style={{ fontSize: 11, fontWeight: 600, background: "#008060", color: "#fff", padding: "3px 10px", borderRadius: 20, flexShrink: 0 }}>
+                  <span style={{ fontSize: 11, fontWeight: 700, background: isRejected && idx === 2 ? "#dc2626" : "#008060", color: "#fff", padding: "3px 10px", borderRadius: 20, flexShrink: 0, letterSpacing: "0.3px" }}>
                     Now
                   </span>
                 )}
@@ -601,23 +625,23 @@ export default function TrackPage() {
         {/* Timeline */}
         {data.history.length > 0 && (
           <div style={s.card}>
-            <h3 style={{ margin: "0 0 16px", fontSize: 16 }}>Timeline</h3>
+            <h3 style={{ margin: "0 0 16px", fontSize: 16, fontWeight: 700 }}>Timeline</h3>
             {data.history.map((entry, idx) => {
               const entryBadge = badgeStyle(entry.toStatus);
               const isLast = idx === data.history.length - 1;
               return (
                 <div key={entry.id} style={{ ...s.historyRow, borderBottom: isLast ? "none" : undefined }}>
-                  <div style={{ width: 10, height: 10, borderRadius: "50%", background: entryBadge.color, marginTop: 5, flexShrink: 0 }} />
+                  <div style={{ width: 10, height: 10, borderRadius: "50%", background: entryBadge.color, marginTop: 5, flexShrink: 0, boxShadow: `0 0 0 3px ${entryBadge.bg}` }} />
                   <div style={{ flex: 1 }}>
                     <div style={{ fontWeight: 600, fontSize: 14 }}>
-                      <span style={{ background: entryBadge.bg, color: entryBadge.color, padding: "2px 10px", borderRadius: 12, fontSize: 13 }}>
+                      <span style={{ background: entryBadge.bg, color: entryBadge.color, padding: "3px 12px", borderRadius: 12, fontSize: 13, fontWeight: 600 }}>
                         {entryBadge.label}
                       </span>
                     </div>
                     {entry.note && (
-                      <p style={{ margin: "6px 0 0", fontSize: 13, color: "#555" }}>{entry.note}</p>
+                      <p style={{ margin: "6px 0 0", fontSize: 13, color: "#374151", lineHeight: 1.5 }}>{entry.note}</p>
                     )}
-                    <p style={{ margin: "4px 0 0", fontSize: 12, color: "#aaa" }}>{formatDate(entry.changedAt)}</p>
+                    <p style={{ margin: "5px 0 0", fontSize: 12, color: "#9ca3af" }}>{formatDate(entry.changedAt)}</p>
                   </div>
                 </div>
               );
@@ -625,7 +649,7 @@ export default function TrackPage() {
           </div>
         )}
 
-        <p style={{ textAlign: "center", color: "#aaa", fontSize: 12, marginTop: 32 }}>
+        <p style={{ textAlign: "center", color: "#d1d5db", fontSize: 12, marginTop: 32 }}>
           Return ID: {data.id}
         </p>
       </div>

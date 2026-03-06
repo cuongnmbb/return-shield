@@ -257,16 +257,26 @@ export default function ReturnsPage() {
           </Text>
         </IndexTable.Cell>
         <IndexTable.Cell>
-          <BlockStack gap="050">
-            <Text as="span" variant="bodyMd">
-              {row.customerName || row.customerEmail}
-            </Text>
-            {row.customerName && (
-              <Text as="span" variant="bodySm" tone="subdued">
-                {row.customerEmail}
+          <InlineStack gap="200" blockAlign="center" wrap={false}>
+            <div style={{
+              width: 32, height: 32, borderRadius: "50%", flexShrink: 0,
+              background: "#e0f2fe", color: "#0369a1",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              fontSize: 12, fontWeight: 700, textTransform: "uppercase",
+            }}>
+              {(row.customerName || row.customerEmail).charAt(0)}
+            </div>
+            <BlockStack gap="050">
+              <Text as="span" variant="bodyMd">
+                {row.customerName || row.customerEmail}
               </Text>
-            )}
-          </BlockStack>
+              {row.customerName && (
+                <Text as="span" variant="bodySm" tone="subdued">
+                  {row.customerEmail}
+                </Text>
+              )}
+            </BlockStack>
+          </InlineStack>
         </IndexTable.Cell>
         <IndexTable.Cell>
           <Badge tone={badge.tone}>{badge.label}</Badge>
