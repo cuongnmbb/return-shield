@@ -2,12 +2,11 @@
 
 client_id = "661999a5eb0e01499c6403ae4fa5931a"
 name = "return-shield"
-application_url = "https://example.com"
+application_url = "https://return-shield.fly.dev"
 embedded = true
 
 [build]
 automatically_update_urls_on_dev = true
-include_config_on_deploy = true
 
 [webhooks]
 api_version = "2026-04"
@@ -29,4 +28,8 @@ prefix = "apps"
 subpath = "returns"
 
 [auth]
-redirect_urls = [ "https://example.com/api/auth" ]
+redirect_urls = [
+  "https://return-shield.fly.dev/auth/callback",
+  "https://return-shield.fly.dev/auth/shopify/callback",
+  "https://return-shield.fly.dev/api/auth/callback"
+]
