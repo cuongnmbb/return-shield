@@ -24,9 +24,10 @@ import {
   Box,
 } from "@shopify/polaris";
 import type { TabProps, BadgeProps } from "@shopify/polaris";
-import { CheckIcon, XIcon } from "@shopify/polaris-icons";
+import { CheckIcon, XIcon, ExternalIcon } from "@shopify/polaris-icons";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
+import prisma from "../db.server";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 
 // ── Types ──────────────────────────────────────────────────────────────
@@ -40,6 +41,7 @@ interface ReturnLineItem {
 interface ReturnItem {
   [key: string]: unknown;
   id: string;
+  localDbId?: string;
   name: string;
   status: string;
   createdAt: string;
@@ -61,6 +63,7 @@ interface LoaderData {
   returns: ReturnItem[];
   counts: Record<string, number>;
   financials: FinancialSummary;
+  portalUrl: string;
 }
 
 interface ActionData {
@@ -281,7 +284,11 @@ function buildCounts(returns: ReturnItem[]): Record<string, number> {
 }
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { admin } = await authenticate.admin(request);
+  const { admin, session } = await authenticate.admin(request);
+
+  const shop = session.shop;
+  const appUrl = process.env.SHOPIFY_APP_URL || "";
+  const portalUrl = `${appUrl}/portal?shop=${encodeURIComponent(shop)}`;
 
   const response = await admin.graphql(RETURNS_QUERY, {
     variables: { first: 50 },
@@ -348,12 +355,44 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     }
   }
 
+  // Merge portal-submitted returns from local DB
+  try {
+    const localReturns = await prisma.returnRequest.findMany({
+      where: { shop },
+      orderBy: { createdAt: "desc" },
+      take: 50,
+    });
+
+    for (const lr of localReturns) {
+      // Skip if this return is already in the Shopify results
+      if (lr.shopifyReturnId && returns.some((r) => r.id === lr.shopifyReturnId)) {
+        continue;
+      }
+      returns.push({
+        id: lr.shopifyReturnId || lr.id,
+        localDbId: lr.id,
+        name: `${lr.orderName}-R1`,
+        status: lr.status === "SUBMITTED" ? "REQUESTED" : lr.status,
+        createdAt: lr.createdAt.toISOString(),
+        totalQuantity: 1,
+        orderName: lr.orderName,
+        orderId: lr.orderId,
+        returnLineItems: lr.reason
+          ? [{ quantity: 1, returnReasonNote: lr.reason, productTitle: "Portal return" }]
+          : [],
+      });
+    }
+  } catch (err) {
+    console.error("Failed to fetch local ReturnRequests:", err);
+  }
+
   if (returns.length === 0 && process.env.NODE_ENV !== "production") {
     const mockReturns = MOCK_RETURNS.map((r) => ({ ...r }));
     return {
       returns: mockReturns,
       counts: buildCounts(mockReturns),
       financials: MOCK_FINANCIALS,
+      portalUrl,
     } satisfies LoaderData;
   }
 
@@ -373,7 +412,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     currencyCode,
   };
 
-  return { returns, counts: buildCounts(returns), financials } satisfies LoaderData;
+  return { returns, counts: buildCounts(returns), financials, portalUrl } satisfies LoaderData;
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
@@ -381,17 +420,29 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const formData = await request.formData();
   const intent = formData.get("intent") as string;
   const returnId = formData.get("returnId") as string;
+  const localDbId = formData.get("localDbId") as string | null;
+  const returnName = (formData.get("returnName") as string) || "";
 
   if (!returnId || !intent) {
     return { success: false, intent: intent ?? "", error: "Missing data" };
   }
 
-  if (returnId.includes("mock")) {
-    return {
-      success: true,
-      intent,
-      returnName: "Mock return",
-    } satisfies ActionData;
+  // Determine if this is a real Shopify Return GID
+  const isRealShopifyReturn =
+    returnId.startsWith("gid://shopify/Return/") && !returnId.includes("mock");
+
+  // Local-only return (portal submission without a Shopify return) — update DB only
+  if (!isRealShopifyReturn) {
+    if (localDbId) {
+      try {
+        const { updateReturnStatus } = await import("../models/returnRequest.server");
+        const newStatus = intent === "approve" ? "APPROVED" : "REJECTED";
+        await updateReturnStatus(localDbId, newStatus as "APPROVED" | "REJECTED", `${intent === "approve" ? "Approved" : "Declined"} by merchant.`);
+      } catch (err) {
+        console.error("Failed to update local return status:", err);
+      }
+    }
+    return { success: true, intent, returnName: returnName || "Return" } satisfies ActionData;
   }
 
   const mutation =
@@ -414,6 +465,17 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       intent,
       error: userErrors.map((e: { message: string }) => e.message).join(", "),
     } satisfies ActionData;
+  }
+
+  // Also sync status to local DB if we have a record
+  if (localDbId) {
+    try {
+      const { updateReturnStatus } = await import("../models/returnRequest.server");
+      const newStatus = intent === "approve" ? "APPROVED" : "REJECTED";
+      await updateReturnStatus(localDbId, newStatus as "APPROVED" | "REJECTED", `${intent === "approve" ? "Approved" : "Declined"} via Shopify.`);
+    } catch (err) {
+      console.error("Failed to sync local return status:", err);
+    }
   }
 
   return {
@@ -511,6 +573,7 @@ function SummaryCard({
 function ReturnActions({ returnItem }: { returnItem: ReturnItem }) {
   const fetcher = useFetcher<ActionData>();
   const shopify = useAppBridge();
+  const [isDone, setIsDone] = useState(false);
   const isSubmitting = fetcher.state !== "idle";
   const submittedIntent =
     fetcher.formData?.get("intent") as string | undefined;
@@ -521,6 +584,7 @@ function ReturnActions({ returnItem }: { returnItem: ReturnItem }) {
         const verb =
           fetcher.data.intent === "approve" ? "approved" : "declined";
         shopify.toast.show(`Return ${fetcher.data.returnName} ${verb}`);
+        setIsDone(true);
       } else {
         shopify.toast.show(fetcher.data.error ?? "Action failed", {
           isError: true,
@@ -529,7 +593,7 @@ function ReturnActions({ returnItem }: { returnItem: ReturnItem }) {
     }
   }, [fetcher.data, shopify]);
 
-  if (returnItem.status !== "REQUESTED") {
+  if (returnItem.status !== "REQUESTED" || isDone) {
     return null;
   }
 
@@ -537,6 +601,8 @@ function ReturnActions({ returnItem }: { returnItem: ReturnItem }) {
     <InlineStack gap="300" blockAlign="center" wrap={false}>
       <fetcher.Form method="post">
         <input type="hidden" name="returnId" value={returnItem.id} />
+        <input type="hidden" name="localDbId" value={returnItem.localDbId ?? ""} />
+        <input type="hidden" name="returnName" value={returnItem.name} />
         <input type="hidden" name="intent" value="approve" />
         <Button
           variant="primary"
@@ -551,6 +617,8 @@ function ReturnActions({ returnItem }: { returnItem: ReturnItem }) {
       </fetcher.Form>
       <fetcher.Form method="post">
         <input type="hidden" name="returnId" value={returnItem.id} />
+        <input type="hidden" name="localDbId" value={returnItem.localDbId ?? ""} />
+        <input type="hidden" name="returnName" value={returnItem.name} />
         <input type="hidden" name="intent" value="decline" />
         <Button
           tone="critical"
@@ -570,7 +638,7 @@ function ReturnActions({ returnItem }: { returnItem: ReturnItem }) {
 // ── Dashboard page ─────────────────────────────────────────────────────
 
 export default function Dashboard() {
-  const { returns, counts, financials } = useLoaderData<LoaderData>();
+  const { returns, counts, financials, portalUrl } = useLoaderData<LoaderData>();
   const [selectedTab, setSelectedTab] = useState(0);
 
   const handleTabChange = useCallback((index: number) => {
@@ -683,7 +751,17 @@ export default function Dashboard() {
   });
 
   return (
-    <Page title="Dashboard" subtitle="Return requests overview" fullWidth>
+    <Page
+      title="Dashboard"
+      subtitle="Return requests overview"
+      fullWidth
+      primaryAction={{
+        content: "Open return portal",
+        icon: ExternalIcon,
+        url: portalUrl,
+        external: true,
+      }}
+    >
       <Layout>
         <Layout.Section>
           <BlockStack gap="400">

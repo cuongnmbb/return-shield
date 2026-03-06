@@ -5,9 +5,6 @@ generator client {
   provider = "prisma-client-js"
 }
 
-// Note that some adapters may set a maximum length for the String type by default, please ensure your strings are long
-// enough when changing adapters.
-// See https://www.prisma.io/docs/orm/reference/prisma-schema-reference#string for more information
 datasource db {
   provider = "sqlite"
   url      = "file:dev.sqlite"
@@ -31,4 +28,168 @@ model Session {
   emailVerified Boolean?  @default(false)
   refreshToken        String?
   refreshTokenExpires DateTime?
+}
+
+// ─── Store Credit ─────────────────────────────────────────────────────────────
+
+model StoreCreditRule {
+  id              String   @id @default(uuid())
+  shop            String   @unique
+  enabled         Boolean  @default(true)
+  bonusPercentage Float    @default(10)
+  minOrderAmount  Float    @default(0)
+  maxCreditAmount Float    @default(500)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model StoreCreditOffer {
+  id            String   @id @default(uuid())
+  shop          String
+  orderId       String
+  orderName     String
+  returnId      String
+  customerId    String?
+  refundAmount  Float
+  creditAmount  Float
+  currencyCode  String   @default("USD")
+  status        String   @default("PENDING")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([shop])
+  @@index([returnId])
+}
+
+// ─── Return Status Tracking ───────────────────────────────────────────────────
+
+model ReturnRequest {
+  id              String          @id @default(cuid())
+  shop            String
+  shopifyReturnId String?         @unique
+  orderName       String
+  orderId         String
+  customerEmail   String
+  customerName    String          @default("")
+  reason          String          @default("")
+  status          String          @default("SUBMITTED")
+  notes           String          @default("")
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  history         StatusHistory[]
+  photos          ReturnPhoto[]
+
+  @@index([shop])
+  @@index([status])
+  @@index([customerEmail])
+}
+
+model StatusHistory {
+  id              String        @id @default(cuid())
+  returnRequestId String
+  returnRequest   ReturnRequest @relation(fields: [returnRequestId], references: [id], onDelete: Cascade)
+  fromStatus      String?
+  toStatus        String
+  note            String        @default("")
+  changedAt       DateTime      @default(now())
+
+  @@index([returnRequestId])
+}
+
+// ─── Return Rules ─────────────────────────────────────────────────────────────
+
+model ReturnRule {
+  id            String   @id @default(uuid())
+  shop          String
+  name          String
+  priority      Int      @default(0)
+  active        Boolean  @default(true)
+  productType   String?
+  returnReason  String?
+  orderValueMin Float?
+  orderValueMax Float?
+  offerType     String
+  bonusPercent  Float    @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([shop, active])
+}
+
+// ─── Notifications ────────────────────────────────────────────────────────────
+
+model NotificationSetting {
+  id                     String   @id @default(uuid())
+  shop                   String   @unique
+  emailEnabled           Boolean  @default(false)
+  emailAddress           String?
+  slackEnabled           Boolean  @default(false)
+  slackWebhookUrl        String?
+  telegramEnabled        Boolean  @default(false)
+  telegramBotToken       String?
+  telegramChatId         String?
+  discordEnabled         Boolean  @default(false)
+  discordWebhookUrl      String?
+  googleSheetsEnabled    Boolean  @default(false)
+  googleSheetsWebhookUrl String?
+  webhookEnabled         Boolean  @default(false)
+  webhookUrl             String?
+  webhookHeaders         String?
+  deliveryMode           String   @default("immediate")
+  digestHourUtc          Int      @default(9)
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+}
+
+model NotificationLog {
+  id          String   @id @default(uuid())
+  shop        String
+  channel     String
+  returnId    String
+  returnName  String
+  orderName   String
+  status      String
+  error       String?
+  sentAt      DateTime?
+  createdAt   DateTime @default(now())
+
+  @@index([shop, status])
+}
+
+// ─── Photo Upload ─────────────────────────────────────────────────────────────
+
+model ReturnPhoto {
+  id              String        @id @default(cuid())
+  returnRequestId String
+  returnRequest   ReturnRequest @relation(fields: [returnRequestId], references: [id], onDelete: Cascade)
+  filename        String
+  mimeType        String
+  data            Bytes
+  sizeBytes       Int
+  createdAt       DateTime      @default(now())
+
+  @@index([returnRequestId])
+}
+
+model PhotoPolicy {
+  id        String   @id @default(cuid())
+  shop      String   @unique
+  required  Boolean  @default(false)
+  maxCount  Int      @default(3)
+  updatedAt DateTime @updatedAt
+}
+
+// ─── Portal Settings ─────────────────────────────────────────────────────────
+
+model PortalSetting {
+  id                  String   @id @default(uuid())
+  shop                String   @unique
+  portalEnabled       Boolean  @default(true)
+  returnWindowDays    Int      @default(30)
+  welcomeMessage      String   @default("")
+  storeCreditEnabled  Boolean  @default(true)
+  autoApprove         Boolean  @default(false)
+  requireReason       Boolean  @default(true)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
 }

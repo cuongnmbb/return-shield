@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 import type { LoaderFunctionArgs, ActionFunctionArgs } from "react-router";
 import {
   useLoaderData,
@@ -21,15 +21,31 @@ import {
   Thumbnail,
   Box,
   Divider,
+  Badge,
 } from "@shopify/polaris";
 import { unauthenticated } from "../shopify.server";
+import prisma from "../db.server";
+import {
+  calculateStoreCreditOffer,
+  createStoreCreditOffer,
+  updateStoreCreditOfferStatus,
+  seedReturnRules,
+} from "../lib/store-credit.server";
+import { createReturnRequest } from "../models/returnRequest.server";
 
 // ── Mock data (dev only) ───────────────────────────────────────────────
 // TODO: Remove mock data before production deployment
 const MOCK_ORDERS: Record<
   string,
   {
-    order: { id: string; name: string; email: string; createdAt: string };
+    order: {
+      id: string;
+      name: string;
+      email: string;
+      createdAt: string;
+      customerId: string | null;
+      currencyCode: string;
+    };
     lineItems: FulfillmentLineItem[];
   }
 > = {
@@ -39,11 +55,14 @@ const MOCK_ORDERS: Record<
       name: "#1001",
       email: "customer@example.com",
       createdAt: new Date(Date.now() - 5 * 86400000).toISOString(),
+      customerId: "gid://shopify/Customer/mock-100",
+      currencyCode: "USD",
     },
     lineItems: [
       {
         id: "gid://shopify/FulfillmentLineItem/mock-101",
         quantity: 2,
+        unitPrice: 149.99,
         lineItem: {
           title: "Blue Snowboard",
           image: { url: "https://cdn.shopify.com/s/files/1/0533/2089/files/placeholder-images-product-1_large.png" },
@@ -53,6 +72,7 @@ const MOCK_ORDERS: Record<
       {
         id: "gid://shopify/FulfillmentLineItem/mock-102",
         quantity: 1,
+        unitPrice: 24.99,
         lineItem: {
           title: "Snowboard Wax",
           image: { url: "https://cdn.shopify.com/s/files/1/0533/2089/files/placeholder-images-product-2_large.png" },
@@ -62,6 +82,7 @@ const MOCK_ORDERS: Record<
       {
         id: "gid://shopify/FulfillmentLineItem/mock-103",
         quantity: 3,
+        unitPrice: 39.99,
         lineItem: {
           title: "Winter Gloves",
           image: { url: "https://cdn.shopify.com/s/files/1/0533/2089/files/placeholder-images-product-3_large.png" },
@@ -76,11 +97,14 @@ const MOCK_ORDERS: Record<
       name: "#1002",
       email: "jane.doe@example.com",
       createdAt: new Date(Date.now() - 3 * 86400000).toISOString(),
+      customerId: "gid://shopify/Customer/mock-200",
+      currencyCode: "USD",
     },
     lineItems: [
       {
         id: "gid://shopify/FulfillmentLineItem/mock-201",
         quantity: 1,
+        unitPrice: 199.99,
         lineItem: {
           title: "Winter Jacket",
           image: { url: "https://cdn.shopify.com/s/files/1/0533/2089/files/placeholder-images-product-4_large.png" },
@@ -90,6 +114,7 @@ const MOCK_ORDERS: Record<
       {
         id: "gid://shopify/FulfillmentLineItem/mock-202",
         quantity: 2,
+        unitPrice: 29.99,
         lineItem: {
           title: "Wool Beanie",
           image: { url: "https://cdn.shopify.com/s/files/1/0533/2089/files/placeholder-images-product-5_large.png" },
@@ -104,11 +129,14 @@ const MOCK_ORDERS: Record<
       name: "#1003",
       email: "customer@example.com",
       createdAt: new Date(Date.now() - 1 * 86400000).toISOString(),
+      customerId: "gid://shopify/Customer/mock-300",
+      currencyCode: "USD",
     },
     lineItems: [
       {
         id: "gid://shopify/FulfillmentLineItem/mock-301",
         quantity: 2,
+        unitPrice: 89.99,
         lineItem: {
           title: "Running Shoes",
           image: { url: "https://cdn.shopify.com/s/files/1/0533/2089/files/placeholder-images-product-6_large.png" },
@@ -118,6 +146,7 @@ const MOCK_ORDERS: Record<
       {
         id: "gid://shopify/FulfillmentLineItem/mock-302",
         quantity: 1,
+        unitPrice: 14.99,
         lineItem: {
           title: "Sport Socks 3-Pack",
           image: null,
@@ -127,6 +156,7 @@ const MOCK_ORDERS: Record<
       {
         id: "gid://shopify/FulfillmentLineItem/mock-303",
         quantity: 1,
+        unitPrice: 19.99,
         lineItem: {
           title: "Water Bottle",
           image: null,
@@ -136,6 +166,7 @@ const MOCK_ORDERS: Record<
       {
         id: "gid://shopify/FulfillmentLineItem/mock-304",
         quantity: 1,
+        unitPrice: 49.99,
         lineItem: {
           title: "Gym Bag",
           image: { url: "https://cdn.shopify.com/s/files/1/0533/2089/files/placeholder-images-product-1_large.png" },
@@ -146,13 +177,12 @@ const MOCK_ORDERS: Record<
   },
 };
 
-function getMockOrderData(orderId: string): LoaderData | null {
+function getMockOrderData(orderId: string): Omit<LoaderData, "shop" | "photoPolicy" | "portalConfig"> | null {
   const mock = MOCK_ORDERS[orderId];
   if (!mock) return null;
   return {
     order: mock.order,
     lineItems: mock.lineItems,
-    shop: "",
   };
 }
 
@@ -172,11 +202,20 @@ const RETURN_REASONS = [
 interface FulfillmentLineItem {
   id: string;
   quantity: number;
+  unitPrice: number;
   lineItem: {
     title: string;
     image: { url: string } | null;
     variant: { title: string } | null;
   };
+}
+
+interface PortalConfig {
+  portalEnabled: boolean;
+  returnWindowDays: number;
+  welcomeMessage: string;
+  storeCreditEnabled: boolean;
+  requireReason: boolean;
 }
 
 interface LoaderData {
@@ -185,16 +224,58 @@ interface LoaderData {
     name: string;
     email: string;
     createdAt: string;
+    customerId: string | null;
+    currencyCode: string;
   };
   lineItems: FulfillmentLineItem[];
   shop: string;
+  photoPolicy: { required: boolean; maxCount: number };
+  portalConfig: PortalConfig;
   error?: string;
 }
 
+interface StoreCreditOfferData {
+  offerId: string;
+  refundAmount: number;
+  creditAmount: number;
+  bonusPercentage: number;
+  currencyCode: string;
+}
+
 interface ActionData {
+  intent?: string;
   success?: boolean;
   returnId?: string;
   error?: string;
+  offer?: StoreCreditOfferData;
+  offerAccepted?: boolean;
+  creditAmount?: number;
+  currencyCode?: string;
+}
+
+const DEFAULT_PHOTO_POLICY = { required: false, maxCount: 3 };
+const DEFAULT_PORTAL_CONFIG: PortalConfig = {
+  portalEnabled: true,
+  returnWindowDays: 30,
+  welcomeMessage: "",
+  storeCreditEnabled: true,
+  requireReason: true,
+};
+
+async function getPortalConfig(shop: string): Promise<PortalConfig> {
+  try {
+    const row = await prisma.portalSetting.findUnique({ where: { shop } });
+    if (!row) return DEFAULT_PORTAL_CONFIG;
+    return {
+      portalEnabled: row.portalEnabled,
+      returnWindowDays: row.returnWindowDays,
+      welcomeMessage: row.welcomeMessage,
+      storeCreditEnabled: row.storeCreditEnabled,
+      requireReason: row.requireReason,
+    };
+  } catch {
+    return DEFAULT_PORTAL_CONFIG;
+  }
 }
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
@@ -202,11 +283,33 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const shop = url.searchParams.get("shop") || "";
   const orderId = url.searchParams.get("orderId") || "";
 
-  if (!shop || !orderId) {
+  const [photoPolicy, portalConfig] = await Promise.all([
+    shop
+      ? import("../models/returnPhoto.server")
+          .then((m) => m.getPhotoPolicy(shop))
+          .catch(() => DEFAULT_PHOTO_POLICY)
+      : Promise.resolve(DEFAULT_PHOTO_POLICY),
+    shop ? getPortalConfig(shop) : Promise.resolve(DEFAULT_PORTAL_CONFIG),
+  ]);
+
+  if (!portalConfig.portalEnabled) {
     return {
-      order: { id: "", name: "", email: "", createdAt: "" },
+      order: { id: "", name: "", email: "", createdAt: "", customerId: null, currencyCode: "USD" },
       lineItems: [],
       shop,
+      photoPolicy,
+      portalConfig,
+      error: "The return portal is currently disabled. Please contact the store for assistance.",
+    } satisfies LoaderData;
+  }
+
+  if (!shop || !orderId) {
+    return {
+      order: { id: "", name: "", email: "", createdAt: "", customerId: null, currencyCode: "USD" },
+      lineItems: [],
+      shop,
+      photoPolicy,
+      portalConfig,
       error: "Missing required parameters.",
     } satisfies LoaderData;
   }
@@ -216,7 +319,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
     const response = await admin.graphql(
       `#graphql
-      query GetOrderByName($query: String!) {
+      query GetOrderForReturn($query: String!) {
         orders(first: 1, query: $query) {
           edges {
             node {
@@ -224,6 +327,15 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
               name
               email
               createdAt
+              customer {
+                id
+              }
+              totalPriceSet {
+                shopMoney {
+                  amount
+                  currencyCode
+                }
+              }
               fulfillments {
                 fulfillmentLineItems(first: 50) {
                   edges {
@@ -237,6 +349,12 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
                         }
                         variant {
                           title
+                        }
+                        discountedUnitPriceSet {
+                          shopMoney {
+                            amount
+                            currencyCode
+                          }
                         }
                       }
                     }
@@ -254,24 +372,39 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     const order = data.data?.orders?.edges?.[0]?.node;
 
     if (!order) {
-      // Fallback to mock data in development
       if (process.env.NODE_ENV !== "production") {
         const mockData = getMockOrderData(orderId);
-        if (mockData) return { ...mockData, shop } satisfies LoaderData;
+        if (mockData) return { ...mockData, shop, photoPolicy, portalConfig } satisfies LoaderData;
       }
       return {
-        order: { id: "", name: "", email: "", createdAt: "" },
+        order: { id: "", name: "", email: "", createdAt: "", customerId: null, currencyCode: "USD" },
         lineItems: [],
         shop,
+        photoPolicy,
+        portalConfig,
         error: "Order not found.",
       } satisfies LoaderData;
     }
 
-    // Collect all fulfillment line items across all fulfillments
+    const currencyCode =
+      order.totalPriceSet?.shopMoney?.currencyCode || "USD";
+
     const lineItems: FulfillmentLineItem[] = [];
     for (const fulfillment of order.fulfillments || []) {
       for (const edge of fulfillment.fulfillmentLineItems?.edges || []) {
-        lineItems.push(edge.node);
+        const node = edge.node;
+        lineItems.push({
+          id: node.id,
+          quantity: node.quantity,
+          unitPrice: parseFloat(
+            node.lineItem?.discountedUnitPriceSet?.shopMoney?.amount || "0",
+          ),
+          lineItem: {
+            title: node.lineItem?.title || "Unknown",
+            image: node.lineItem?.image || null,
+            variant: node.lineItem?.variant || null,
+          },
+        });
       }
     }
 
@@ -282,9 +415,13 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
           name: order.name,
           email: order.email || "",
           createdAt: order.createdAt,
+          customerId: order.customer?.id || null,
+          currencyCode,
         },
         lineItems: [],
         shop,
+        photoPolicy,
+        portalConfig,
         error: "This order has no fulfilled items eligible for return.",
       } satisfies LoaderData;
     }
@@ -295,23 +432,28 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         name: order.name,
         email: order.email || "",
         createdAt: order.createdAt,
+        customerId: order.customer?.id || null,
+        currencyCode,
       },
       lineItems,
       shop,
+      photoPolicy,
+      portalConfig,
     } satisfies LoaderData;
   } catch (error) {
     console.error("Portal request loader error:", error);
 
-    // Fallback to mock data in development
     if (process.env.NODE_ENV !== "production") {
       const mockData = getMockOrderData(orderId);
-      if (mockData) return { ...mockData, shop } satisfies LoaderData;
+      if (mockData) return { ...mockData, shop, photoPolicy, portalConfig } satisfies LoaderData;
     }
 
     return {
-      order: { id: "", name: "", email: "", createdAt: "" },
+      order: { id: "", name: "", email: "", createdAt: "", customerId: null, currencyCode: "USD" },
       lineItems: [],
       shop,
+      photoPolicy,
+      portalConfig,
       error: "Unable to load order details. Please try again.",
     } satisfies LoaderData;
   }
@@ -319,12 +461,138 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
 export const action = async ({ request }: ActionFunctionArgs) => {
   const formData = await request.formData();
+  const intent = String(formData.get("intent") || "submit_return");
   const shop = String(formData.get("shop") || "");
+
+  // ── Accept store credit offer ──────────────────────────────────────
+  if (intent === "accept_credit") {
+    const offerId = String(formData.get("offerId") || "");
+    const returnId = String(formData.get("returnId") || "");
+    const customerId = String(formData.get("customerId") || "");
+    const creditAmount = String(formData.get("creditAmount") || "0");
+    const currencyCode = String(formData.get("currencyCode") || "USD");
+
+    if (!offerId || !customerId) {
+      return { intent, error: "Missing required data." } satisfies ActionData;
+    }
+
+    // Mock acceptance in development
+    if (process.env.NODE_ENV !== "production" && customerId.includes("mock")) {
+      try {
+        await updateStoreCreditOfferStatus(offerId, "ACCEPTED");
+      } catch (err) {
+        console.error("Failed to update mock offer status:", err);
+      }
+      return {
+        intent,
+        offerAccepted: true,
+        creditAmount: parseFloat(creditAmount),
+        currencyCode,
+      } satisfies ActionData;
+    }
+
+    try {
+      const { admin } = await unauthenticated.admin(shop);
+
+      // Issue store credit to customer
+      const creditResponse = await admin.graphql(
+        `#graphql
+        mutation StoreCreditAccountCredit($id: ID!, $creditInput: StoreCreditAccountCreditInput!) {
+          storeCreditAccountCredit(id: $id, creditInput: $creditInput) {
+            storeCreditAccountTransaction {
+              amount {
+                amount
+                currencyCode
+              }
+            }
+            userErrors {
+              message
+              field
+            }
+          }
+        }`,
+        {
+          variables: {
+            id: customerId,
+            creditInput: {
+              creditAmount: {
+                amount: creditAmount,
+                currencyCode,
+              },
+            },
+          },
+        },
+      );
+
+      const creditData = await creditResponse.json();
+      const creditResult = creditData.data?.storeCreditAccountCredit;
+
+      if (creditResult?.userErrors?.length > 0) {
+        const errorMsg = creditResult.userErrors
+          .map((e: { message: string }) => e.message)
+          .join(". ");
+        return { intent, error: errorMsg } satisfies ActionData;
+      }
+
+      // Auto-approve the return
+      if (returnId) {
+        await admin.graphql(
+          `#graphql
+          mutation ReturnApproveRequest($input: ReturnApproveRequestInput!) {
+            returnApproveRequest(input: $input) {
+              return {
+                id
+                status
+              }
+              userErrors {
+                field
+                message
+              }
+            }
+          }`,
+          { variables: { input: { id: returnId } } },
+        );
+      }
+
+      // Update offer status
+      await updateStoreCreditOfferStatus(offerId, "ACCEPTED");
+
+      return {
+        intent,
+        offerAccepted: true,
+        creditAmount: parseFloat(creditAmount),
+        currencyCode,
+      } satisfies ActionData;
+    } catch (error) {
+      console.error("Store credit acceptance error:", error);
+      return { intent, error: "Failed to issue store credit. Please try again." } satisfies ActionData;
+    }
+  }
+
+  // ── Decline store credit offer ─────────────────────────────────────
+  if (intent === "decline_credit") {
+    const offerId = String(formData.get("offerId") || "");
+    if (offerId) {
+      try {
+        await updateStoreCreditOfferStatus(offerId, "DECLINED");
+      } catch (err) {
+        console.error("Failed to update offer status:", err);
+      }
+    }
+    return { intent, success: true } satisfies ActionData;
+  }
+
+  // ── Submit return request ──────────────────────────────────────────
   const orderId = String(formData.get("orderId") || "");
+  const orderName = String(formData.get("orderName") || "");
+  const customerId = String(formData.get("customerId") || "");
+  const customerEmail = String(formData.get("customerEmail") || "");
+  const currencyCode = String(formData.get("currencyCode") || "USD");
   const itemsJson = String(formData.get("items") || "[]");
+  const pricesJson = String(formData.get("prices") || "[]");
 
   if (!shop || !orderId) {
-    return { error: "Missing required parameters." } satisfies ActionData;
+    return { intent, error: "Missing required parameters." } satisfies ActionData;
   }
 
   let items: Array<{
@@ -333,37 +601,112 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     returnReason: string;
     customerNote: string;
   }>;
+  let prices: Array<{ price: number; quantity: number; returnReason?: string; productType?: string }>;
 
   try {
     items = JSON.parse(itemsJson);
+    prices = JSON.parse(pricesJson);
   } catch {
-    return { error: "Invalid request data." } satisfies ActionData;
+    return { intent, error: "Invalid request data." } satisfies ActionData;
   }
 
   if (!items || items.length === 0) {
-    return { error: "Please select at least one item to return." } satisfies ActionData;
+    return { intent, error: "Please select at least one item to return." } satisfies ActionData;
   }
 
-  // Validate each item has a reason
   for (const item of items) {
     if (!item.returnReason) {
-      return { error: "Please select a return reason for all selected items." } satisfies ActionData;
+      return { intent, error: "Please select a return reason for all selected items." } satisfies ActionData;
     }
     if (!item.fulfillmentLineItemId || item.quantity < 1) {
-      return { error: "Invalid item selection." } satisfies ActionData;
+      return { intent, error: "Invalid item selection." } satisfies ActionData;
     }
   }
 
   // Mock submission in development
-  if (
-    process.env.NODE_ENV !== "production" &&
-    orderId.includes("mock")
-  ) {
+  if (process.env.NODE_ENV !== "production" && orderId.includes("mock")) {
     console.log("Mock return request submitted:", { orderId, items });
-    return {
-      success: true,
-      returnId: "gid://shopify/Return/mock-new",
-    } satisfies ActionData;
+    const returnId = `gid://shopify/Return/mock-${Date.now()}`;
+
+    // Resolve the actual shop — fall back to the first session in the DB
+    let ruleShop = shop;
+    if (!ruleShop) {
+      try {
+        const db = await import("../db.server");
+        const session = await db.default.session.findFirst({ select: { shop: true } });
+        ruleShop = session?.shop ?? "mock-shop";
+      } catch {
+        ruleShop = "mock-shop";
+      }
+    }
+    await seedReturnRules(ruleShop);
+
+    let mockDbId: string | null = null;
+    try {
+      const dbRecord = await createReturnRequest({
+        shop: ruleShop,
+        shopifyReturnId: returnId,
+        orderName,
+        orderId,
+        customerEmail,
+        customerName: "",
+        reason: items.map(i => i.returnReason).filter(Boolean).join("; "),
+      });
+      mockDbId = dbRecord.id;
+    } catch (err) {
+      console.error("Failed to save mock ReturnRequest to DB:", err);
+    }
+
+    // Save uploaded photos
+    if (mockDbId) {
+      const { addPhoto, validateImageFile } = await import("../models/returnPhoto.server");
+      const photoFiles = formData.getAll("photos") as File[];
+      for (const file of photoFiles) {
+        if (!file || file.size === 0) continue;
+        if (validateImageFile(file)) continue;
+        try {
+          const buffer = Buffer.from(await file.arrayBuffer());
+          await addPhoto({ returnRequestId: mockDbId, filename: file.name, mimeType: file.type, data: buffer, sizeBytes: file.size });
+        } catch (err) {
+          console.error("Failed to save photo:", err);
+        }
+      }
+    }
+
+    // Calculate store credit offer
+    try {
+      const offer = await calculateStoreCreditOffer(shop || "mock-shop", prices, currencyCode);
+
+      if (offer.eligible) {
+        const dbOffer = await createStoreCreditOffer({
+          shop: shop || "mock-shop",
+          orderId,
+          orderName,
+          returnId,
+          customerId: customerId || undefined,
+          refundAmount: offer.refundAmount,
+          creditAmount: offer.creditAmount,
+          currencyCode: offer.currencyCode,
+        });
+
+        return {
+          intent,
+          success: true,
+          returnId,
+          offer: {
+            offerId: dbOffer.id,
+            refundAmount: offer.refundAmount,
+            creditAmount: offer.creditAmount,
+            bonusPercentage: offer.bonusPercentage,
+            currencyCode: offer.currencyCode,
+          },
+        } satisfies ActionData;
+      }
+    } catch (err) {
+      console.error("Store credit offer calculation failed:", err);
+    }
+
+    return { intent, success: true, returnId } satisfies ActionData;
   }
 
   try {
@@ -405,20 +748,86 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       const errorMessage = result.userErrors
         .map((e: { message: string }) => e.message)
         .join(". ");
-      return { error: errorMessage } satisfies ActionData;
+      return { intent, error: errorMessage } satisfies ActionData;
     }
 
     if (!result?.return?.id) {
-      return { error: "Failed to create return request. Please try again." } satisfies ActionData;
+      return { intent, error: "Failed to create return request. Please try again." } satisfies ActionData;
     }
 
-    return {
-      success: true,
-      returnId: result.return.id,
-    } satisfies ActionData;
+    const returnId = result.return.id;
+    const customerEmail = String(formData.get("customerEmail") || "");
+
+    // Save to local DB so it appears in /app/returns (non-blocking)
+    let dbRequestId: string | null = null;
+    try {
+      const dbRecord = await createReturnRequest({
+        shop,
+        shopifyReturnId: returnId,
+        orderName,
+        orderId,
+        customerEmail,
+        customerName: "",
+        reason: items.map(i => i.returnReason).filter(Boolean).join("; "),
+      });
+      dbRequestId = dbRecord.id;
+    } catch (err) {
+      console.error("Failed to save ReturnRequest to DB:", err);
+    }
+
+    // Save uploaded photos
+    if (dbRequestId) {
+      const { addPhoto, validateImageFile } = await import("../models/returnPhoto.server");
+      const photoFiles = formData.getAll("photos") as File[];
+      for (const file of photoFiles) {
+        if (!file || file.size === 0) continue;
+        if (validateImageFile(file)) continue;
+        try {
+          const buffer = Buffer.from(await file.arrayBuffer());
+          await addPhoto({ returnRequestId: dbRequestId, filename: file.name, mimeType: file.type, data: buffer, sizeBytes: file.size });
+        } catch (err) {
+          console.error("Failed to save photo:", err);
+        }
+      }
+    }
+
+    // Calculate store credit offer (non-blocking — don't crash if it fails)
+    try {
+      const offer = await calculateStoreCreditOffer(shop, prices, currencyCode);
+
+      if (offer.eligible && customerId) {
+        const dbOffer = await createStoreCreditOffer({
+          shop,
+          orderId,
+          orderName,
+          returnId,
+          customerId,
+          refundAmount: offer.refundAmount,
+          creditAmount: offer.creditAmount,
+          currencyCode: offer.currencyCode,
+        });
+
+        return {
+          intent,
+          success: true,
+          returnId,
+          offer: {
+            offerId: dbOffer.id,
+            refundAmount: offer.refundAmount,
+            creditAmount: offer.creditAmount,
+            bonusPercentage: offer.bonusPercentage,
+            currencyCode: offer.currencyCode,
+          },
+        } satisfies ActionData;
+      }
+    } catch (err) {
+      console.error("Store credit offer calculation failed:", err);
+    }
+
+    return { intent, success: true, returnId } satisfies ActionData;
   } catch (error) {
     console.error("Portal return request error:", error);
-    return { error: "Unable to submit your return request. Please try again later." } satisfies ActionData;
+    return { intent, error: "Unable to submit your return request. Please try again later." } satisfies ActionData;
   }
 };
 
@@ -429,12 +838,24 @@ interface ItemSelection {
   note: string;
 }
 
+function formatCurrency(amount: number, currencyCode: string): string {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: currencyCode,
+  }).format(amount);
+}
+
 export default function PortalRequest() {
-  const { order, lineItems, shop, error: loaderError } =
+  const { order, lineItems, shop, photoPolicy, portalConfig, error: loaderError } =
     useLoaderData<typeof loader>() as LoaderData;
   const actionData = useActionData<typeof action>() as ActionData | undefined;
   const navigation = useNavigation();
   const isSubmitting = navigation.state === "submitting";
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [photoFiles, setPhotoFiles] = useState<File[]>([]);
+  const [photoPreviews, setPhotoPreviews] = useState<string[]>([]);
+  const [photoError, setPhotoError] = useState<string | null>(null);
 
   const [selections, setSelections] = useState<Record<string, ItemSelection>>(
     () => {
@@ -462,16 +883,25 @@ export default function PortalRequest() {
   );
 
   const selectedItems = Object.entries(selections)
-    .filter(([, sel]) => sel.selected && sel.reason)
+    .filter(([, sel]) => sel.selected && (portalConfig.requireReason ? sel.reason : true))
     .map(([id, sel]) => ({
       fulfillmentLineItemId: id,
       quantity: sel.quantity,
-      returnReason: sel.reason,
+      returnReason: sel.reason || "OTHER",
       customerNote: sel.note,
     }));
 
+  // Build prices array for store credit calculation
+  const selectedPrices = Object.entries(selections)
+    .filter(([, sel]) => sel.selected && (portalConfig.requireReason ? sel.reason : true))
+    .map(([id, sel]) => {
+      const item = lineItems.find((li) => li.id === id);
+      return { price: item?.unitPrice || 0, quantity: sel.quantity, returnReason: sel.reason || "OTHER" };
+    });
+
   const hasSelections = Object.values(selections).some((s) => s.selected);
 
+  // ── Error state ────────────────────────────────────────────────────
   if (loaderError) {
     return (
       <Page
@@ -492,7 +922,152 @@ export default function PortalRequest() {
     );
   }
 
-  if (actionData?.success) {
+  // ── Store credit accepted ──────────────────────────────────────────
+  if (actionData?.offerAccepted) {
+    return (
+      <Page title="Store Credit Issued" narrowWidth>
+        <Layout>
+          <Layout.Section>
+            <Card>
+              <BlockStack gap="400">
+                <Banner tone="success">
+                  <Text as="p">
+                    {formatCurrency(
+                      actionData.creditAmount || 0,
+                      actionData.currencyCode || "USD",
+                    )}{" "}
+                    store credit has been added to your account!
+                  </Text>
+                </Banner>
+                <Text as="p" tone="subdued">
+                  You can use this credit on your next purchase. Your return for
+                  order {order.name} has been approved automatically.
+                </Text>
+                <InlineStack gap="300">
+                  <Button url={`/portal?shop=${encodeURIComponent(shop)}`}>
+                    Return to portal
+                  </Button>
+                  <Button
+                    variant="primary"
+                    url="/app"
+                  >
+                    Continue shopping
+                  </Button>
+                </InlineStack>
+              </BlockStack>
+            </Card>
+          </Layout.Section>
+        </Layout>
+      </Page>
+    );
+  }
+
+  // ── Store credit offer ─────────────────────────────────────────────
+  if (actionData?.success && actionData?.offer && portalConfig.storeCreditEnabled) {
+    const { offer } = actionData;
+    const bonusAmount = offer.creditAmount - offer.refundAmount;
+
+    return (
+      <Page title="Store Credit Offer" narrowWidth>
+        <Layout>
+          <Layout.Section>
+            <Card>
+              <BlockStack gap="400">
+                <Banner tone="info">
+                  <Text as="p" fontWeight="semibold">
+                    You qualify for instant store credit!
+                  </Text>
+                </Banner>
+
+                <BlockStack gap="300">
+                  <Text as="p" variant="bodyLg">
+                    Instead of waiting for a refund, get instant store credit
+                    with a {offer.bonusPercentage}% bonus:
+                  </Text>
+
+                  <Card>
+                    <BlockStack gap="300">
+                      <InlineStack align="space-between">
+                        <Text as="span" tone="subdued">
+                          Regular refund
+                        </Text>
+                        <Text as="span" tone="subdued" textDecorationLine="line-through">
+                          {formatCurrency(offer.refundAmount, offer.currencyCode)}
+                        </Text>
+                      </InlineStack>
+
+                      <Divider />
+
+                      <InlineStack align="space-between">
+                        <InlineStack gap="200" blockAlign="center">
+                          <Text as="span" fontWeight="bold" variant="headingMd">
+                            Store credit
+                          </Text>
+                          <Badge tone="success">
+                            +{offer.bonusPercentage}% bonus
+                          </Badge>
+                        </InlineStack>
+                        <Text
+                          as="span"
+                          fontWeight="bold"
+                          variant="headingMd"
+                          tone="success"
+                        >
+                          {formatCurrency(offer.creditAmount, offer.currencyCode)}
+                        </Text>
+                      </InlineStack>
+
+                      <InlineStack align="space-between">
+                        <Text as="span" variant="bodySm" tone="subdued">
+                          You save extra
+                        </Text>
+                        <Text as="span" variant="bodySm" tone="success">
+                          +{formatCurrency(bonusAmount, offer.currencyCode)}
+                        </Text>
+                      </InlineStack>
+                    </BlockStack>
+                  </Card>
+                </BlockStack>
+
+                {actionData?.error && (
+                  <Banner tone="critical">
+                    <Text as="p">{actionData.error}</Text>
+                  </Banner>
+                )}
+
+                <BlockStack gap="200">
+                  <Form method="post">
+                    <input type="hidden" name="intent" value="accept_credit" />
+                    <input type="hidden" name="shop" value={shop} />
+                    <input type="hidden" name="offerId" value={offer.offerId} />
+                    <input type="hidden" name="returnId" value={actionData.returnId || ""} />
+                    <input type="hidden" name="customerId" value={order.customerId || ""} />
+                    <input type="hidden" name="creditAmount" value={String(offer.creditAmount)} />
+                    <input type="hidden" name="currencyCode" value={offer.currencyCode} />
+                    <Button variant="primary" submit loading={isSubmitting} fullWidth>
+                      Accept {formatCurrency(offer.creditAmount, offer.currencyCode)} store credit
+                    </Button>
+                  </Form>
+                  <Form method="post">
+                    <input type="hidden" name="intent" value="decline_credit" />
+                    <input type="hidden" name="shop" value={shop} />
+                    <input type="hidden" name="offerId" value={offer.offerId} />
+                    <Button variant="plain" submit loading={isSubmitting} fullWidth>
+                      No thanks, continue with refund
+                    </Button>
+                  </Form>
+                </BlockStack>
+              </BlockStack>
+            </Card>
+          </Layout.Section>
+        </Layout>
+      </Page>
+    );
+  }
+
+  // ── Return submitted (no offer or declined) ────────────────────────
+  if (actionData?.success && actionData?.intent !== "submit_return") {
+    // Declined credit — show normal success
     return (
       <Page title="Return Submitted" narrowWidth>
         <Layout>
@@ -516,6 +1091,32 @@ export default function PortalRequest() {
     );
   }
 
+  if (actionData?.success && !actionData?.offer) {
+    // No offer available — show normal success
+    return (
+      <Page title="Return Submitted" narrowWidth>
+        <Layout>
+          <Layout.Section>
+            <Card>
+              <BlockStack gap="400">
+                <Banner tone="success">
+                  <Text as="p">
+                    Your return request for order {order.name} has been submitted
+                    successfully. The store will review your request and get back to you.
+                  </Text>
+                </Banner>
+                <Button url={`/portal?shop=${encodeURIComponent(shop)}`}>
+                  Return to portal
+                </Button>
+              </BlockStack>
+            </Card>
+          </Layout.Section>
+        </Layout>
+      </Page>
+    );
+  }
+
+  // ── Item selection form ────────────────────────────────────────────
   return (
     <Page
       title="Request a Return"
@@ -523,6 +1124,14 @@ export default function PortalRequest() {
       backAction={{ url: `/portal?shop=${encodeURIComponent(shop)}` }}
     >
       <Layout>
+        {portalConfig.welcomeMessage && (
+          <Layout.Section>
+            <Banner tone="info">
+              <p>{portalConfig.welcomeMessage}</p>
+            </Banner>
+          </Layout.Section>
+        )}
+
         <Layout.Section>
           <Card>
             <BlockStack gap="200">
@@ -533,6 +1142,11 @@ export default function PortalRequest() {
                 {order.email} &middot;{" "}
                 {new Date(order.createdAt).toLocaleDateString()}
               </Text>
+              {portalConfig.returnWindowDays > 0 && (
+                <Text as="p" variant="bodySm" tone="subdued">
+                  Returns accepted within {portalConfig.returnWindowDays} days of delivery
+                </Text>
+              )}
             </BlockStack>
           </Card>
         </Layout.Section>
@@ -578,7 +1192,7 @@ export default function PortalRequest() {
                                 </Text>
                               )}
                             <Text as="span" variant="bodySm" tone="subdued">
-                              Qty fulfilled: {item.quantity}
+                              {formatCurrency(item.unitPrice, order.currencyCode)} &times; {item.quantity}
                             </Text>
                           </BlockStack>
                         </InlineStack>
@@ -639,7 +1253,55 @@ export default function PortalRequest() {
         <Layout.Section>
           <Card>
             <BlockStack gap="400">
-              {actionData?.error && (
+              <Text variant="headingSm" as="h2">
+                Upload photos {photoPolicy.required ? <Badge tone="attention">Required</Badge> : <Badge>Optional</Badge>}
+              </Text>
+              <Text as="p" variant="bodySm" tone="subdued">
+                Attach photos to help us assess your return.
+                Up to {photoPolicy.maxCount} photo{photoPolicy.maxCount > 1 ? "s" : ""}, max 5 MB each (JPEG, PNG, WebP, GIF).
+              </Text>
+
+              {photoError && (
+                <Banner tone="critical" onDismiss={() => setPhotoError(null)}>
+                  <Text as="p">{photoError}</Text>
+                </Banner>
+              )}
+
+              <Box
+                background="bg-surface-secondary"
+                borderRadius="200"
+                padding="400"
+              >
+                <BlockStack gap="300">
+                  <Button
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={isSubmitting}
+                  >
+                    {photoFiles.length > 0 ? `${photoFiles.length} photo${photoFiles.length > 1 ? "s" : ""} selected — change` : "Select photos"}
+                  </Button>
+
+                  {photoPreviews.length > 0 && (
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                      {photoPreviews.map((url, i) => (
+                        <img
+                          key={i}
+                          src={url}
+                          alt={`Preview ${i + 1}`}
+                          style={{ width: 72, height: 72, objectFit: "cover", borderRadius: 8, border: "2px solid #008060" }}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </BlockStack>
+              </Box>
+            </BlockStack>
+          </Card>
+        </Layout.Section>
+
+        <Layout.Section>
+          <Card>
+            <BlockStack gap="400">
+              {actionData?.error && actionData?.intent === "submit_return" && (
                 <Banner tone="critical">
                   <Text as="p">{actionData.error}</Text>
                 </Banner>
@@ -652,13 +1314,51 @@ export default function PortalRequest() {
                 </Text>
               )}
 
-              <Form method="post">
+              <Form
+                method="post"
+                encType="multipart/form-data"
+                onSubmit={(e) => {
+                  if (photoPolicy.required && photoFiles.length === 0) {
+                    e.preventDefault();
+                    setPhotoError("Please upload at least one photo before submitting.");
+                    return;
+                  }
+                  // Sync selected files into the hidden file input that lives inside the form
+                  if (fileInputRef.current && photoFiles.length > 0) {
+                    const dt = new DataTransfer();
+                    photoFiles.forEach(f => dt.items.add(f));
+                    fileInputRef.current.files = dt.files;
+                  }
+                }}
+              >
+                <input type="hidden" name="intent" value="submit_return" />
                 <input type="hidden" name="shop" value={shop} />
                 <input type="hidden" name="orderId" value={order.id} />
+                <input type="hidden" name="orderName" value={order.name} />
+                <input type="hidden" name="customerEmail" value={order.email || ""} />
+                <input type="hidden" name="customerId" value={order.customerId || ""} />
+                <input type="hidden" name="currencyCode" value={order.currencyCode} />
+                <input type="hidden" name="items" value={JSON.stringify(selectedItems)} />
+                <input type="hidden" name="prices" value={JSON.stringify(selectedPrices)} />
+                {/* File input — triggered by "Select photos" button above */}
                 <input
-                  type="hidden"
-                  name="items"
-                  value={JSON.stringify(selectedItems)}
+                  ref={fileInputRef}
+                  type="file"
+                  name="photos"
+                  multiple
+                  accept="image/jpeg,image/png,image/webp,image/gif"
+                  style={{ display: "none" }}
+                  onChange={(e) => {
+                    const files = Array.from(e.target.files ?? []);
+                    const valid = files.filter(f => f.size <= 5 * 1024 * 1024).slice(0, photoPolicy.maxCount);
+                    if (valid.length < files.length) {
+                      setPhotoError(`Some files were removed (exceeds 5 MB or max ${photoPolicy.maxCount} photos).`);
+                    } else {
+                      setPhotoError(null);
+                    }
+                    setPhotoFiles(valid);
+                    setPhotoPreviews(valid.map(f => URL.createObjectURL(f)));
+                  }}
                 />
                 <Button
                   variant="primary"
